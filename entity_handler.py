@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
@@ -10,16 +12,65 @@ from particles import Particle, Particles
 import math, random
 
 _particles_manager : Particles = None
+_bullets_manager : Bullets_Handler = None
+_ships_handler : Ships_Handler = None
+_islands: list[Island] = []
 
 def set_particles_manager(particles_manager):
     global _particles_manager
     _particles_manager = particles_manager
 
+def set_bullets_manager(bullets_manager):
+    global _bullets_manager
+    _bullets_manager = bullets_manager
+
+def set_islands(islands):
+    global _islands
+    _islands = islands
+
+def set_ships_handler(ships_handler):
+    global _ships_handler
+    _ships_handler = ships_handler
+
+class SubIsland:
+    def __init__(self, position, size):
+        self.position = position
+        self.size = size
+        self.color = (random.uniform(0.2, 0.4), random.uniform(0.6, 0.9), random.uniform(0.2, 0.4))
+
+    def draw(self):
+        glPushMatrix()
+        glTranslatef(self.position[0], self.position[1], self.position[2])
+        glColor3f(*self.color)
+        glutSolidSphere(self.size/2, 20, 20)
+        glPopMatrix()
+
+class Island:
+    def __init__(self, position, size, sub_count):
+        self.position = position
+        self.size = size
+        self.sub_count = sub_count
+
+        self.sub_islands = []
+
+        for _ in range(sub_count):
+            sub_size = random.uniform(0.35, 0.6) * size
+            ang = random.uniform(0, 2 * math.pi)
+            d = (size - sub_size)/2
+
+            sub_x = position[0] + d * math.cos(ang)
+            sub_y = position[1] + d * math.sin(ang)
+            self.sub_islands.append(SubIsland(position=(sub_x, sub_y, -sub_size/4), size=sub_size))
+
+    def draw(self):
+        for sub_island in self.sub_islands:
+            sub_island.draw()      
+
 class SHIP_TYPE(Enum):
     DESTROYER = 0
     BATTLESHIP = 1
 
-g = 3.0
+g = 1.0
 v = 40.0
 
 class Bullets_Handler:
@@ -29,11 +80,23 @@ class Bullets_Handler:
     def add_bullet(self, bullet):
         self.bullets.append(bullet)
 
+    def is_col_island(self, bullet: Bullet, island: Island):
+        for sub_island in island.sub_islands:
+            if dist_3D(bullet.position, sub_island.position) < (sub_island.size/2):
+                dir = [bullet.position[0] - sub_island.position[0], bullet.position[1] - sub_island.position[1], bullet.position[2] - sub_island.position[2]]
+                dir = set_mag(dir, sub_island.size/2)
+                bullet.position[0] = sub_island.position[0] + dir[0]
+                bullet.position[1] = sub_island.position[1] + dir[1]
+                bullet.position[2] = sub_island.position[2] + dir[2]
+                return True
+        return False
+
     def update(self, dt):
+        global _particles_manager
+
         for i in range(len(self.bullets)- 1, -1, -1):
             self.bullets[i].update(dt)
             if self.bullets[i].position[2] < 0:
-                global _particles_manager
                 if _particles_manager is not None:
                     _particles_manager.add_particle_p(
                         position=[self.bullets[i].position[0], self.bullets[i].position[1], 0],
@@ -44,14 +107,38 @@ class Bullets_Handler:
                     )
 
                 del self.bullets[i]
+                continue
+
+            if self.bullets[i].position[2] < 20: #island level 
+                global _islands
+                deleted = False
+                for island in _islands:
+                    if cube_collide(self.bullets[i].position, island.position, island.size*2):
+                        col = self.is_col_island(self.bullets[i], island)
+                        if col:
+                            print("Bullet collided with island")
+                            if _particles_manager is not None:
+                                _particles_manager.add_particle_p(
+                                    position=[self.bullets[i].position[0], self.bullets[i].position[1], self.bullets[i].position[2]],
+                                    velocity=[0, 0, 0.0],
+                                    lifetime=random.uniform(1.0, 1.5),
+                                    size=random.uniform(2, 4),
+                                    color=(1.0, 0.7, 0.20)
+                                )
+                            del self.bullets[i]
+                            deleted = True
+                            break
+                if deleted:
+                    continue
 
     def draw(self):
         for bullet in self.bullets:
             bullet.draw()
 
 class Bullet:
-    def __init__(self, position):
+    def __init__(self, position, player_bullet = True):
         self.position = position
+        self.player_bullet = player_bullet
 
     def set_bullet_trajectory(self, target):
         position = self.position
@@ -175,6 +262,15 @@ class Ship:
                         size=random.uniform(0.1, 0.5)
                     )
 
+        for island in _islands:
+            if rect_collide(self.position, island.position, island.size*2):
+                if dist_2D(self.position, island.position) < island.size/2:
+                    dir = [self.position[0] - island.position[0], self.position[1] - island.position[1], 0]
+                    dir = set_mag(dir, island.size/2)
+                    self.position[0] = island.position[0] + dir[0]
+                    self.position[1] = island.position[1] + dir[1]
+
+                    self.speed *= 0.5
 
     def get_turret_pos(self):
         turret_positions = []
@@ -217,6 +313,20 @@ class Ship:
             glPopMatrix()
         glPopMatrix()
 
+class Ships_Handler:
+    def __init__(self):
+        self.ships = []
+
+    def add_ship(self, ship):
+        self.ships.append(ship)
+
+    def update(self, player_ship, dt):
+        for ship in self.ships:
+            ship.update(dt)
+
+    def draw(self):
+        for ship in self.ships:
+            ship.draw()
 
 
 

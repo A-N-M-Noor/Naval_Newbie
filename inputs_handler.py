@@ -2,7 +2,12 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
-import pyautogui, time
+import time
+
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None
 
 class KeyboardInput:
     def __init__(self):
@@ -96,6 +101,8 @@ class MouseInput:
         self.mouse_position = (x, y)
 
     def set_pos(self, x, y):
+        if pyautogui is None:
+            raise RuntimeError("pyautogui is required for MouseInput.set_pos")
         wX, wY = glutGet(GLUT_WINDOW_X), glutGet(GLUT_WINDOW_Y)
         pyautogui.moveTo(wX + x, wY + y)
 

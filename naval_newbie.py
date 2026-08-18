@@ -10,7 +10,8 @@ from OpenGL.GLU import *
 from utils import *
 from inputs_handler import KeyboardInput, MouseInput
 from camera_controller import CameraController
-from entity_handler import Ship, SHIP_TYPE, Player, Bullet, Bullets_Handler, set_particles_manager
+from entity_handler import Ship, Ships_Handler, SHIP_TYPE, Player, Bullet, Bullets_Handler, Island
+from entity_handler import set_ships_handler, set_particles_manager, set_bullets_manager, set_islands
 from particles import Particle, Particles
 
 from enum import Enum
@@ -47,9 +48,47 @@ class GameController:
         self.target_3D = [0.0, 0.0, 0.0]
 
         self.bullets_manager = Bullets_Handler()
+        set_bullets_manager(self.bullets_manager)
 
         self.particle_manager = Particles()
         set_particles_manager(self.particle_manager)
+
+        self.islands = []
+        set_islands(self.islands)
+        self.set_environment()
+
+        self.ships_handler = Ships_Handler()
+        set_ships_handler(self.ships_handler)
+
+        for _ in range(5):
+            self.add_ship()
+
+
+    def add_ship(self):
+        while True:
+            dir = random.uniform(0, 2*math.pi)
+            dst = random.uniform(100, 300)
+            x = self.player.ship.position[0] + dst * math.cos(dir)
+            y = self.player.ship.position[1] + dst * math.sin(dir)
+
+            col = False
+            for island in self.islands:
+                if rect_collide([x, y, 0], island.position, island.size*2):
+                    col = True
+                    break
+            if not col:
+                ship = Ship(position=[x, y], rotation=random.uniform(0, math.pi * 2), ship_type=random.choice(list(SHIP_TYPE)))
+                self.ships_handler.add_ship(ship)
+                break
+
+    def set_environment(self):
+        island_count = random.randint(20, 30)
+        for _ in range(island_count):
+            pos = [random.uniform(-500, 500), random.uniform(-500, 500), 0]
+            size = random.uniform(50, 60)
+            sub_count = random.randint(8, 16)
+            island = Island(position=pos, size=size, sub_count=sub_count)
+            self.islands.append(island)
 
     def set_cursor_hidden(self, hidden):
         self.cursor_hidden = hidden
@@ -118,21 +157,27 @@ class GameController:
             draw_line(pN_Cx(0.45), pN_Cy(0.5), pN_Cx(0.1), pN_Cy(0.5))
 
             for i in range(10):
-                        x = 0.55 + i* ((0.9-0.55)/10)
-                        draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
+                x = 0.55 + i* ((0.9-0.55)/10)
+                draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
 
-                        x = 0.45 + i* ((0.1-0.45)/10)
-                        draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
+                x = 0.45 + i* ((0.1-0.45)/10)
+                draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
 
-    def showScreen(self):
-        glClearColor(0.5, 1.0, 1.0, 1.0)
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glViewport(0, 0, self.WIDTH, self.HEIGHT)
+            for ship in self.ships_handler.ships:
+                marker_p = [ship.position[0], ship.position[1], 5.0]
+                pos_x, pos_y, visible = conv_3d_2_2d(marker_p, self.cam)
+                if visible:
+                    glBegin(GL_TRIANGLES)
+                    glColor3f(1.0, 1.0, 0.0)
+                    glVertex2f(pos_x-5, pos_y + 15)
+                    glVertex2f(pos_x+5, pos_y + 15)
+                    glColor3f(1.0, 0.0, 1.0)
+                    glVertex2f(pos_x, pos_y)
+                    glEnd()
 
-        set_window_size(self.WIDTH, self.HEIGHT)
-        
+    def show_game(self):
         self.cam.setupCamera()
-
+        
         if self.game_state in (GameState.PLAYING, GameState.PAUSED):
             glBegin(GL_QUADS)
             glColor3f(0, 0.75, 1)
@@ -150,12 +195,26 @@ class GameController:
         glPopMatrix()
 
         self.player.draw()
+        self.ships_handler.draw()
         self.particle_manager.draw()
         self.bullets_manager.draw()
+
+        for island in self.islands:
+            island.draw()
 
         begin2D(self.WIDTH, self.HEIGHT)
         self.draw_hud()
         end2D()
+
+    def showScreen(self):
+        glClearColor(0.5, 1.0, 1.0, 1.0)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glViewport(0, 0, self.WIDTH, self.HEIGHT)
+
+        set_window_size(self.WIDTH, self.HEIGHT)
+        
+        if self.game_state in (GameState.PLAYING, GameState.PAUSED):
+            self.show_game()
 
         glutSwapBuffers()
 
@@ -192,6 +251,7 @@ class GameController:
             self.particle_manager.update(self.dt)
 
             self.player_control()
+            self.ships_handler.update(self.player.ship, self.dt)
 
             if(self.mouse.left_button_pressed and self.player.ship.load_status >= 1.0):
                 turrets = self.player.ship.get_turret_pos()

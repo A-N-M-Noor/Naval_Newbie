@@ -3,8 +3,15 @@ from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
 import numpy as np
-
 from utils import lerp
+
+
+# def lerp(a, b, t):
+#     if t < 0.0:
+#         t = 0.0
+#     elif t > 1.0:
+#         t = 1.0
+#     return a + (b - a) * t
 
 class CameraController:
     def __init__(self, fovY):
