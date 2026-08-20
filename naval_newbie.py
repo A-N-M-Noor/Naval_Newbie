@@ -134,6 +134,25 @@ class GameController:
             else:
                 self.cam.zoom_camera(0.5)
 
+    def draw_ship_marker(self, ship: Ship):
+        marker_p = [ship.position[0], ship.position[1], 5.0]
+        pos_x, pos_y, visible = conv_3d_2_2d(marker_p, self.cam)
+
+        if not visible:
+            return
+        
+        if ship.hp == ship.max_hp:
+            glColor3f(1.0, 0.0, 1.0)
+            draw_line(pos_x-5, pos_y+5, pos_x, pos_y)
+            draw_line(pos_x+5, pos_y+5, pos_x, pos_y)
+            return
+
+        if ship.alive:
+            glColor3f(0.3, 0.3, 0.3)
+            draw_rect(pos_x-pN_Cy(0.05), pos_y-pN_Cy(0.01), pN_Cy(0.1), pN_Cy(0.01))
+            ht = ship.hp / ship.max_hp
+            glColor3f(1.0, 0.0, 0.0)
+            draw_rect(pos_x-pN_Cy(0.05), pos_y-pN_Cy(0.01), pN_Cy(0.1)*ht, pN_Cy(0.01))
     
     def draw_hud(self):
         draw_text(10, self.HEIGHT - 30, f"Game State: {self.game_state.name}")
@@ -164,16 +183,7 @@ class GameController:
                 draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
 
             for ship in self.ships_handler.ships:
-                marker_p = [ship.position[0], ship.position[1], 5.0]
-                pos_x, pos_y, visible = conv_3d_2_2d(marker_p, self.cam)
-                if visible:
-                    glBegin(GL_TRIANGLES)
-                    glColor3f(1.0, 1.0, 0.0)
-                    glVertex2f(pos_x-5, pos_y + 15)
-                    glVertex2f(pos_x+5, pos_y + 15)
-                    glColor3f(1.0, 0.0, 1.0)
-                    glVertex2f(pos_x, pos_y)
-                    glEnd()
+                self.draw_ship_marker(ship)
 
         if self.game_state == GameState.PAUSED:
             pass
@@ -190,13 +200,19 @@ class GameController:
             glVertex3f(1000, -1000, 0)
             glEnd()
 
-        self.target_3D = self.cam.get_target_pos(h=0.0)
-        glPushMatrix()
-        glTranslatef(self.target_3D[0], self.target_3D[1], self.target_3D[2])
-        glColor3f(1.0, 0.0, 0.0)
-        glutSolidSphere(0.1, 20, 20)
-        glPopMatrix()
+        t_3D = self.cam.get_target_pos(h=0.0)
+        t_ship = False
 
+        for ship in self.ships_handler.ships:
+            p = line_intersect_box_r(ship.position, ship.size, ship.heading, self.cam.position, t_3D)
+            if p:
+                self.target_3D = p
+                t_ship = True
+                break
+        if not t_ship:
+            self.target_3D = t_3D
+
+                
         self.player.draw()
         self.ships_handler.draw()
         self.particle_manager.draw()

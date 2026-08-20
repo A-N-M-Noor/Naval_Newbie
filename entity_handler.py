@@ -70,8 +70,8 @@ class SHIP_TYPE(Enum):
     DESTROYER = 0
     BATTLESHIP = 1
 
-g = 1.0
-v = 40.0
+g = 1.7
+v = 80.0
 
 class Bullets_Handler:
     def __init__(self):
@@ -120,6 +120,26 @@ class Bullets_Handler:
                     del self.bullets[i]
                     continue
 
+            if bullet.position[2] < 10: #ship level
+                global _ships_handler
+                deleted = False
+                for ship in _ships_handler.ships:
+                    if bullet.collide_ship(ship):
+                        if _particles_manager is not None:
+                            _particles_manager.add_particle_p(
+                                position=[bullet.position[0], bullet.position[1], bullet.position[2]],
+                                velocity=[0, 0, 0.0],
+                                lifetime=random.uniform(1.0, 1.5),
+                                size=random.uniform(2, 4),
+                                color=(1.0, random.uniform(0.7, 0.8), random.uniform(0.20, 0.40))
+                            )
+                        ship.take_damage(bullet.damage)
+                        deleted = True
+                        break
+                if deleted:
+                    del self.bullets[i]
+                    continue
+
     def draw(self):
         for bullet in self.bullets:
             bullet.draw()
@@ -127,7 +147,10 @@ class Bullets_Handler:
 class Bullet:
     def __init__(self, position, damage = 10, player_bullet = True):
         self.position = position
+        self.last_position = position
+        self.trail_segments = []
         self.player_bullet = player_bullet
+        
         self.damage = 10
 
     def set_bullet_trajectory(self, target):
@@ -170,10 +193,29 @@ class Bullet:
                 return True
         return False
 
+    def collide_ship(self, ship: Ship):
+        t = 0
+        d = dist_3D(self.position, self.last_position)
+        if d == 0:
+            return False
+
+        while t < 1:
+            t += 0.5/d
+            p = lerp_nD(self.last_position, self.position, t)
+            if is_point_in_box(ship.position, ship.size, ship.heading, p):
+                return True
+        return False
+
     def update(self, dt):
+        self.last_position = self.position.copy()
+
         self.position[0] += self.velocity[0] * dt
         self.position[1] += self.velocity[1] * dt
         self.position[2] += self.velocity[2] * dt
+
+        self.trail_segments.append(self.position.copy())
+        if len(self.trail_segments) > 10:
+            self.trail_segments.pop(0)
 
         self.velocity[2] -= g * dt
 
@@ -184,13 +226,25 @@ class Bullet:
         glutSolidSphere(0.2, 10, 10)
         glPopMatrix()
 
+        for i in range(len(self.trail_segments)-1):
+            p1 = self.trail_segments[i]
+            p2 = self.trail_segments[i+1]
+            glColor3f(1.0, 1.0, 0.3)
+            glLineWidth(remap(i, 0, len(self.trail_segments)-1, 1.0, 10.0))
+            draw_3D_line(p1, p2)
+
 class Ship:
     def __init__(self, ship_type, position, rotation):
+        if len(position) == 2:
+            position.append(0.0)
+
         self.ship_type = ship_type
         self.position = position
         self.last_position = position.copy()
         self.heading = rotation
         self.last_heading = rotation
+
+        self.size = [6.0, 1.5, 1.5] if ship_type == SHIP_TYPE.DESTROYER else [10.0, 2.0, 1.5]
 
         self.max_speed = 10.0 if ship_type == SHIP_TYPE.DESTROYER else 5.0
         self.acceleration = 2.0 if ship_type == SHIP_TYPE.DESTROYER else 1.0
@@ -217,7 +271,9 @@ class Ship:
         if ship_type == SHIP_TYPE.DESTROYER:
             self.turrets.append([2.0, 0.0, 0.75])
             self.turrets.append([-2.0, 0.0, 0.75])
-        
+
+        self.on_screen = True
+        self.alive = True
     
     def move(self, throttle, steer, target):
         self.throttle = max(-1.0, min(1.0, throttle))
@@ -227,6 +283,10 @@ class Ship:
         self.target[1] = target[1]
 
     def add_bubbles(self, pos, spread, init_size=0.5, quantity=3):
+        global _particles_manager
+        if _particles_manager is None:
+            return
+    
         for _ in range(quantity):
             x = random.uniform(-spread, spread)
             y = random.uniform(-1.5, 1.5)
@@ -240,12 +300,40 @@ class Ship:
                 size=random.uniform(init_size/5.0, init_size)
             )
 
+    def add_fire(self, init_size, lifetime, quantity=3):
+        global _particles_manager
+        if _particles_manager is None:
+            return
+
+        for _ in range(quantity):
+            particle_position = get_random_in_box_r(self.position, self.size, self.heading)
+            particle_velocity = [0.0, 0.0, random.uniform(1.0, 2.0)]
+
+            _particles_manager.add_particle_p(
+                position=particle_position, 
+                velocity=particle_velocity, 
+                lifetime=random.uniform(lifetime[0], lifetime[1]),
+                size=random.uniform(init_size/5.0, init_size),
+                color=(1.0, random.uniform(0.5, 1.0), 0.0)
+            )
+    
     def update(self, dt):
         self.load_status += dt / self.reload_time
         self.load_status = min(self.load_status, 1.0)
 
-        target_speed = self.throttle * self.max_speed
-        target_turn = self.steer * self.max_turning_speed * (self.speed / self.max_speed)
+        if self.alive:
+            target_speed = self.throttle * self.max_speed
+            target_turn = self.steer * self.max_turning_speed * (self.speed / self.max_speed)
+        else:
+            target_speed = 0.0
+            target_turn = 0.0
+
+            self.position[2] -= 0.25 * dt
+
+            self.add_fire(init_size=1, lifetime=(1.0, 2.0), quantity=3)
+
+            if self.position[2] < -self.size[2]:
+                self.on_screen = False
 
         if self.speed < target_speed:
             self.speed += self.acceleration * dt
@@ -292,6 +380,25 @@ class Ship:
 
                     self.speed *= 0.5
 
+    def take_damage(self, damage):
+        self.hp -= damage
+        if self.hp <= 0:
+            self.hp = 0
+
+            if self.alive:
+                self.alive = False
+                global _particles_manager
+                if _particles_manager is None:
+                    return
+                for _ in range(10):
+                    _particles_manager.add_particle_p(
+                        get_random_in_box_r(self.position, self.size, self.heading),
+                        [0.0, 0.0, 0.0],
+                        random.uniform(1.5, 3.5),
+                        random.uniform(0.5, 1.0),
+                        (1.0, random.uniform(0.5, 0.7), random.uniform(0.2, 0.4))
+                    )
+
     def get_turret_pos(self):
         turret_positions = []
         for turret in self.turrets:
@@ -303,8 +410,11 @@ class Ship:
 
     def draw_destroyer(self):
         glPushMatrix()
-        glScalef(6.0, 1.5, 1.5)
-        glColor3f(0.7, 0.7, 0.7)
+        glScalef(self.size[0], self.size[1], self.size[2])
+        if self.alive:
+            glColor3f(0.7, 0.7, 0.7)
+        else:
+            glColor3f(0.5, 0.5, 0.5)
         glutSolidCube(1.0)
         glPopMatrix()
 
@@ -315,22 +425,45 @@ class Ship:
             glTranslatef(turret[0], turret[1], turret[2])
             glRotatef(look, 0, 0, 1)
             glScalef(0.6, 0.5, 0.5)
-            glColor3f(0.2, 0.2, 0.2)
+            if self.alive:
+                glColor3f(0.2, 0.2, 0.2)
+            else:
+                glColor3f(0.1, 0.1, 0.1)
+            glutSolidCube(1.0)
+            glPopMatrix()
+
+    def draw_battleship(self):
+        glPushMatrix()
+        glScalef(self.size[0], self.size[1], self.size[2])
+        if self.alive:
+            glColor3f(0.7, 0.7, 0.7)
+        else:
+            glColor3f(0.5, 0.5, 0.5)
+        glutSolidCube(1.0)
+        glPopMatrix()
+
+        look = math.degrees(math.atan2(self.target[1] - self.position[1], self.target[0] - self.position[0]) - self.heading)
+
+        for turret in self.turrets:
+            glPushMatrix()
+            glTranslatef(turret[0], turret[1], turret[2])
+            glRotatef(look, 0, 0, 1)
+            glScalef(0.6, 0.5, 0.5)
+            if self.alive:
+                glColor3f(0.2, 0.2, 0.2)
+            else:
+                glColor3f(0.1, 0.1, 0.1)
             glutSolidCube(1.0)
             glPopMatrix()
 
     def draw(self):
         glPushMatrix()
-        glTranslatef(self.position[0], self.position[1], 0)
+        glTranslatef(self.position[0], self.position[1], self.position[2])
         glRotatef(math.degrees(self.heading), 0, 0, 1)
         if self.ship_type == SHIP_TYPE.DESTROYER:
             self.draw_destroyer()
         elif self.ship_type == SHIP_TYPE.BATTLESHIP:
-            glPushMatrix()
-            glScalef(10.0, 2.0, 1.5)
-            glColor3f(1.0, 0.5, 0.5)
-            glutSolidCube(2.0)
-            glPopMatrix()
+            self.draw_battleship()
         glPopMatrix()
 
 class Ships_Handler:

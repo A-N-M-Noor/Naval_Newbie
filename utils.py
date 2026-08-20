@@ -13,6 +13,14 @@ def set_window_size(width, height):
     global _W, _H
     _W, _H = width, height
 
+def rotate_point(px, py, cx, cy, theta):
+    dx = px - cx
+    dy = py - cy
+    cos_t = np.cos(theta)
+    sin_t = np.sin(theta)
+    local_x = dx * cos_t + dy * sin_t
+    local_y = -dx * sin_t + dy * cos_t
+    return local_x, local_y
 
 def pN_Cx(x):
     return (x * _W)
@@ -47,6 +55,7 @@ def draw_line(x1, y1, x2, y2):
     glVertex2f(x2, y2)
     glEnd()
 
+
 def draw_triangle(x1, y1, x2, y2, x3, y3):
     glBegin(GL_TRIANGLES)
     glVertex2f(x1, y1)
@@ -78,6 +87,20 @@ def draw_rect(x, y, w, h):
     glVertex2f(x + w, y + h)
     glVertex2f(x, y + h)
     glEnd()
+
+def draw_3D_line(p1, p2):
+    glBegin(GL_LINES)
+    glVertex3f(p1[0], p1[1], p1[2])
+    glVertex3f(p2[0], p2[1], p2[2])
+    glEnd()
+
+def remap(value, leftMin, leftMax, rightMin, rightMax):
+    leftSpan = leftMax - leftMin
+    rightSpan = rightMax - rightMin
+
+    valueScaled = float(value - leftMin) / float(leftSpan)
+
+    return rightMin + (valueScaled * rightSpan)
 
 def lerp(a, b, t):
     if t < 0.0:
@@ -186,7 +209,11 @@ def conv_3d_2_2d(pos_3d: list[float], cam) -> tuple[float, float, bool]:
     return screen_x, screen_y, True
 
 def is_point_in_box(box_center, box_size, theta, point):
-    x, y, z = box_center
+    x, y, z = 0.0, 0.0, 0.0
+    if len(box_center) == 2:
+        x, y, z = box_center[0], box_center[1], 0.0
+    else:
+        x, y, z = box_center
     l, w, h = box_size
     x1, y1, z1 = point
 
@@ -209,7 +236,83 @@ def is_point_in_box(box_center, box_size, theta, point):
         
     return True
 
+def line_intersect_box_r(box_center: list[float], box_size: list[float], theta: float, p1: list[float], p2: list[float]) -> list[float] | bool:
+    dim = len(p1)
+    
+    # 1. Translate points to the box's local space
+    p1_loc = [p1[i] - box_center[i] for i in range(dim)]
+    p2_loc = [p2[i] - box_center[i] for i in range(dim)]
+    
+    # 2. Rotate points by -theta around the Z axis to align the box with the axes
+    cos_t = np.cos(-theta)
+    sin_t = np.sin(-theta)
+    
+    def rot_z(p: list[float]) -> list[float]:
+        x = p[0] * cos_t - p[1] * sin_t
+        y = p[0] * sin_t + p[1] * cos_t
+        res = [x, y]
+        if dim > 2:
+            res.extend(p[2:]) # Preserve Z and any other dimensions
+        return res
+        
+    p1_rot = rot_z(p1_loc)
+    p2_rot = rot_z(p2_loc)
+    
+    # 3. Ray direction in local space
+    d = [p2_rot[i] - p1_rot[i] for i in range(dim)]
+    
+    t_enter = float('-inf')
+    t_exit = float('inf')
+    
+    # 4. Calculate intersection using the Slab Method
+    half_size = [s / 2.0 for s in box_size]
+    
+    for i in range(len(box_size)):
+        if abs(d[i]) < 1e-8:
+            # Ray is parallel to the slab; check if it is outside
+            if p1_rot[i] < -half_size[i] or p1_rot[i] > half_size[i]:
+                return False
+        else:
+            t1 = (-half_size[i] - p1_rot[i]) / d[i]
+            t2 = (half_size[i] - p1_rot[i]) / d[i]
+            
+            if t1 > t2:
+                t1, t2 = t2, t1
+                
+            t_enter = max(t_enter, t1)
+            t_exit = min(t_exit, t2)
+            
+            if t_enter > t_exit:
+                return False
+                
+    # 5. Determine the correct intersection scalar (t)
+    # If t_enter >= 0, P1 is outside and hits the box.
+    # If t_enter < 0, P1 is inside the box, so the first boundary hit going forward is t_exit.
+    t = t_enter if t_enter >= 0 else t_exit
+        
+    # Check if the intersection happens within the bounds of the line segment [0, 1]
+    if t < 0.0 or t > 1.0:
+        return False
+        
+    # 6. Calculate and return the exact intersection point in global space
+    return [p1[i] + t * (p2[i] - p1[i]) for i in range(dim)]
 
+def get_random_in_box_r(box_center, box_size, theta):
+    l, w, h = box_size
+    x = np.random.uniform(-l/2, l/2)
+    y = np.random.uniform(-w/2, w/2)
+    z = np.random.uniform(-h/2, h/2)
+
+    cos_t = np.cos(theta)
+    sin_t = np.sin(theta)
+
+    rotated_x = x * cos_t - y * sin_t
+    rotated_y = x * sin_t + y * cos_t
+
+    if len(box_center) == 2:
+        return [rotated_x + box_center[0], rotated_y + box_center[1], z]
+    else:
+        return [rotated_x + box_center[0], rotated_y + box_center[1], z + box_center[2]]
 
 
 
