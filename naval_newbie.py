@@ -188,6 +188,16 @@ class GameController:
         if self.game_state == GameState.PAUSED:
             pass
 
+    def get_target_3D(self):
+        t_3D = self.cam.get_target_pos(h=0.0)
+
+        for ship in self.ships_handler.ships:
+            p = line_intersect_box_r(ship.position, ship.size, ship.heading, self.cam.position, t_3D)
+            if p:
+                return p
+
+        return t_3D
+
     def show_game(self):
         self.cam.setupCamera()
         
@@ -200,19 +210,14 @@ class GameController:
             glVertex3f(1000, -1000, 0)
             glEnd()
 
-        t_3D = self.cam.get_target_pos(h=0.0)
-        t_ship = False
+        self.target_3D = self.get_target_3D()
 
-        for ship in self.ships_handler.ships:
-            p = line_intersect_box_r(ship.position, ship.size, ship.heading, self.cam.position, t_3D)
-            if p:
-                self.target_3D = p
-                t_ship = True
-                break
-        if not t_ship:
-            self.target_3D = t_3D
-
-                
+        # glPushMatrix()
+        # glTranslatef(self.target_3D[0], self.target_3D[1], self.target_3D[2])
+        # glColor3f(1.0, 0.0, 0.0)
+        # glutSolidSphere(0.1, 10, 10)
+        # glPopMatrix()
+        
         self.player.draw()
         self.ships_handler.draw()
         self.particle_manager.draw()
@@ -276,8 +281,8 @@ class GameController:
                 turrets = self.player.ship.get_turret_pos()
                 for turret in turrets:
                     bullet = Bullet(position=turret.copy(), damage=self.player.ship.damage, player_bullet=True)
-                    spread = 0.5
-                    tg = [self.target_3D[0] + random.uniform(-spread, spread), self.target_3D[1] + random.uniform(-spread, spread), self.target_3D[2]]
+                    spread = 0.25
+                    tg = [self.target_3D[0] + random.uniform(-spread, spread), self.target_3D[1] + random.uniform(-spread, spread), 0.0]
                     if bullet.set_bullet_trajectory(target=tg):
                         self.bullets_manager.add_bullet(bullet)
                 self.player.ship.load_status = 0.0

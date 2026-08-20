@@ -124,6 +124,8 @@ class Bullets_Handler:
                 global _ships_handler
                 deleted = False
                 for ship in _ships_handler.ships:
+                    if not cube_collide(bullet.position, ship.position, ship.size[0]*3):
+                        continue
                     if bullet.collide_ship(ship):
                         if _particles_manager is not None:
                             _particles_manager.add_particle_p(
@@ -194,27 +196,22 @@ class Bullet:
         return False
 
     def collide_ship(self, ship: Ship):
-        t = 0
-        d = dist_3D(self.position, self.last_position)
-        if d == 0:
-            return False
+        p = line_intersect_box_r(ship.position, ship.size, ship.heading, self.last_position, self.position)
 
-        while t < 1:
-            t += 0.5/d
-            p = lerp_nD(self.last_position, self.position, t)
-            if is_point_in_box(ship.position, ship.size, ship.heading, p):
-                self.position = p
-                return True
+        if p:
+            self.position = p
+            return True
         return False
 
     def update(self, dt):
         self.last_position = self.position.copy()
-
+        self.trail_segments.append(self.position.copy())
+        
         self.position[0] += self.velocity[0] * dt
         self.position[1] += self.velocity[1] * dt
         self.position[2] += self.velocity[2] * dt
 
-        self.trail_segments.append(self.position.copy())
+        
         if len(self.trail_segments) > 10:
             self.trail_segments.pop(0)
 
@@ -231,7 +228,7 @@ class Bullet:
             p1 = self.trail_segments[i]
             p2 = self.trail_segments[i+1]
             glColor3f(1.0, 1.0, 0.3)
-            glLineWidth(remap(i, 0, len(self.trail_segments)-1, 1.0, 10.0))
+            glLineWidth(remap(i, 0, len(self.trail_segments)-1, 1.0, 5.0))
             draw_3D_line(p1, p2)
 
 class Ship:

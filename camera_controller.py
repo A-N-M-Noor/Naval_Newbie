@@ -32,7 +32,7 @@ class CameraController:
         self.pitch += cursor_dir[1] * scale[1] * dt
         self.yaw += cursor_dir[0] * scale[0] * dt
 
-        self.pitch = min(max(self.pitch, np.deg2rad(0.5)), np.deg2rad(20))
+        self.pitch = min(max(self.pitch, np.deg2rad(0.1)), np.deg2rad(20))
 
     def zoom_camera(self, zoom_amount):
         self.distance += zoom_amount

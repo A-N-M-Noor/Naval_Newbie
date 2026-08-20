@@ -239,11 +239,9 @@ def is_point_in_box(box_center, box_size, theta, point):
 def line_intersect_box_r(box_center: list[float], box_size: list[float], theta: float, p1: list[float], p2: list[float]) -> list[float] | bool:
     dim = len(p1)
     
-    # 1. Translate points to the box's local space
     p1_loc = [p1[i] - box_center[i] for i in range(dim)]
     p2_loc = [p2[i] - box_center[i] for i in range(dim)]
     
-    # 2. Rotate points by -theta around the Z axis to align the box with the axes
     cos_t = np.cos(-theta)
     sin_t = np.sin(-theta)
     
@@ -252,24 +250,21 @@ def line_intersect_box_r(box_center: list[float], box_size: list[float], theta: 
         y = p[0] * sin_t + p[1] * cos_t
         res = [x, y]
         if dim > 2:
-            res.extend(p[2:]) # Preserve Z and any other dimensions
+            res.extend(p[2:])
         return res
         
     p1_rot = rot_z(p1_loc)
     p2_rot = rot_z(p2_loc)
     
-    # 3. Ray direction in local space
     d = [p2_rot[i] - p1_rot[i] for i in range(dim)]
     
     t_enter = float('-inf')
     t_exit = float('inf')
     
-    # 4. Calculate intersection using the Slab Method
     half_size = [s / 2.0 for s in box_size]
     
     for i in range(len(box_size)):
         if abs(d[i]) < 1e-8:
-            # Ray is parallel to the slab; check if it is outside
             if p1_rot[i] < -half_size[i] or p1_rot[i] > half_size[i]:
                 return False
         else:
@@ -285,17 +280,42 @@ def line_intersect_box_r(box_center: list[float], box_size: list[float], theta: 
             if t_enter > t_exit:
                 return False
                 
-    # 5. Determine the correct intersection scalar (t)
-    # If t_enter >= 0, P1 is outside and hits the box.
-    # If t_enter < 0, P1 is inside the box, so the first boundary hit going forward is t_exit.
     t = t_enter if t_enter >= 0 else t_exit
         
-    # Check if the intersection happens within the bounds of the line segment [0, 1]
     if t < 0.0 or t > 1.0:
         return False
         
-    # 6. Calculate and return the exact intersection point in global space
     return [p1[i] + t * (p2[i] - p1[i]) for i in range(dim)]
+
+def line_intersect_sphere(sphere_center: list[float], radius: float, p1: list[float], p2: list[float]) -> list[float] | bool:
+    p1_arr = np.array(p1, dtype=float)
+    p2_arr = np.array(p2, dtype=float)
+    center = np.array(sphere_center, dtype=float)
+
+    d = p2_arr - p1_arr
+    oc = p1_arr - center
+    
+    a = np.dot(d, d)
+    b = 2.0 * np.dot(oc, d)
+    c = np.dot(oc, oc) - radius**2
+
+    discriminant = b**2 - 4 * a * c
+    
+    if discriminant < 0:
+        return False
+        
+    sqrt_disc = np.sqrt(discriminant)
+
+    t_entry = (-b - sqrt_disc) / (2.0 * a)
+    
+    if t_entry < 0.0:
+        return False
+        
+    if t_entry > 1.0:
+        return False
+        
+    intersection = p1_arr + t_entry * d
+    return intersection.tolist()
 
 def get_random_in_box_r(box_center, box_size, theta):
     l, w, h = box_size
