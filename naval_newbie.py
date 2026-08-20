@@ -123,9 +123,9 @@ class GameController:
 
     def handle_click(self, is_left_button, is_pressed):
         if is_pressed:
-            print(f"Mouse button {'left' if is_left_button else 'right'} pressed")
+            pass
         else:
-            print(f"Mouse button {'left' if is_left_button else 'right'} released")
+            pass
 
     def handle_scroll(self, direction):
         if self.game_state == GameState.PLAYING:

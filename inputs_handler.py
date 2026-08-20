@@ -90,7 +90,6 @@ class MouseInput:
             
 
     def mouse_wheel(self, wheel, direction, x, y):
-        print(f"Mouse wheel scrolled {'up' if direction > 0 else 'down'} at position ({x}, {y})")
         if self.mouse_wheel_callback is not None:
             self.mouse_wheel_callback(direction)
 
