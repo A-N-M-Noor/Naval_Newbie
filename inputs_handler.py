@@ -4,10 +4,7 @@ from OpenGL.GLU import *
 
 import time
 
-try:
-    import pyautogui
-except ImportError:
-    pyautogui = None
+import pyautogui
 
 class KeyboardInput:
     def __init__(self):

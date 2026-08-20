@@ -80,26 +80,18 @@ class Bullets_Handler:
     def add_bullet(self, bullet):
         self.bullets.append(bullet)
 
-    def is_col_island(self, bullet: Bullet, island: Island):
-        for sub_island in island.sub_islands:
-            if dist_3D(bullet.position, sub_island.position) < (sub_island.size/2):
-                dir = [bullet.position[0] - sub_island.position[0], bullet.position[1] - sub_island.position[1], bullet.position[2] - sub_island.position[2]]
-                dir = set_mag(dir, sub_island.size/2)
-                bullet.position[0] = sub_island.position[0] + dir[0]
-                bullet.position[1] = sub_island.position[1] + dir[1]
-                bullet.position[2] = sub_island.position[2] + dir[2]
-                return True
-        return False
 
     def update(self, dt):
         global _particles_manager
 
         for i in range(len(self.bullets)- 1, -1, -1):
-            self.bullets[i].update(dt)
-            if self.bullets[i].position[2] < 0:
+            bullet: Bullet = self.bullets[i]
+
+            bullet.update(dt)
+            if bullet.position[2] <= 0:
                 if _particles_manager is not None:
                     _particles_manager.add_particle_p(
-                        position=[self.bullets[i].position[0], self.bullets[i].position[1], 0],
+                        position=[bullet.position[0], bullet.position[1], 0],
                         velocity=[0, 0, -1.0],
                         lifetime=random.uniform(1.0, 1.5),
                         size=random.uniform(2, 4),
@@ -109,26 +101,23 @@ class Bullets_Handler:
                 del self.bullets[i]
                 continue
 
-            if self.bullets[i].position[2] < 20: #island level 
+            if bullet.position[2] < 20: #island level 
                 global _islands
                 deleted = False
                 for island in _islands:
-                    if cube_collide(self.bullets[i].position, island.position, island.size*2):
-                        col = self.is_col_island(self.bullets[i], island)
-                        if col:
-                            print("Bullet collided with island")
-                            if _particles_manager is not None:
-                                _particles_manager.add_particle_p(
-                                    position=[self.bullets[i].position[0], self.bullets[i].position[1], self.bullets[i].position[2]],
-                                    velocity=[0, 0, 0.0],
-                                    lifetime=random.uniform(1.0, 1.5),
-                                    size=random.uniform(2, 4),
-                                    color=(1.0, 0.7, 0.20)
-                                )
-                            del self.bullets[i]
-                            deleted = True
-                            break
+                    if bullet.collide_island(island):
+                        if _particles_manager is not None:
+                            _particles_manager.add_particle_p(
+                                position=[bullet.position[0], bullet.position[1], bullet.position[2]],
+                                velocity=[0, 0, 0.0],
+                                lifetime=random.uniform(1.0, 1.5),
+                                size=random.uniform(2, 4),
+                                color=(1.0, random.uniform(0.7, 0.8), random.uniform(0.20, 0.40))
+                            )
+                        deleted = True
+                        break
                 if deleted:
+                    del self.bullets[i]
                     continue
 
     def draw(self):
@@ -136,9 +125,10 @@ class Bullets_Handler:
             bullet.draw()
 
 class Bullet:
-    def __init__(self, position, player_bullet = True):
+    def __init__(self, position, damage = 10, player_bullet = True):
         self.position = position
         self.player_bullet = player_bullet
+        self.damage = 10
 
     def set_bullet_trajectory(self, target):
         position = self.position
@@ -162,6 +152,24 @@ class Bullet:
             return True
         return False
 
+    def is_col_island(self, island: Island):
+            for sub_island in island.sub_islands:
+                if dist_3D(self.position, sub_island.position) < (sub_island.size/2):
+                    dir = [self.position[0] - sub_island.position[0], self.position[1] - sub_island.position[1], self.position[2] - sub_island.position[2]]
+                    dir = set_mag(dir, sub_island.size/2)
+                    self.position[0] = sub_island.position[0] + dir[0]
+                    self.position[1] = sub_island.position[1] + dir[1]
+                    self.position[2] = sub_island.position[2] + dir[2]
+                    return True
+            return False
+    
+    def collide_island(self, island: Island):
+        if cube_collide(self.position, island.position, island.size*2):
+            col = self.is_col_island(island)
+            if col:
+                return True
+        return False
+
     def update(self, dt):
         self.position[0] += self.velocity[0] * dt
         self.position[1] += self.velocity[1] * dt
@@ -180,7 +188,9 @@ class Ship:
     def __init__(self, ship_type, position, rotation):
         self.ship_type = ship_type
         self.position = position
+        self.last_position = position.copy()
         self.heading = rotation
+        self.last_heading = rotation
 
         self.max_speed = 10.0 if ship_type == SHIP_TYPE.DESTROYER else 5.0
         self.acceleration = 2.0 if ship_type == SHIP_TYPE.DESTROYER else 1.0
@@ -190,7 +200,8 @@ class Ship:
         self.speed = 0.0
         self.turn = 0.0
 
-        self.hp = 100 if ship_type == SHIP_TYPE.DESTROYER else 200
+        self.max_hp = 100 if ship_type == SHIP_TYPE.DESTROYER else 200
+        self.hp = self.max_hp
         self.damage = 10 if ship_type == SHIP_TYPE.DESTROYER else 20
         self.reload_time = 2.0 if ship_type == SHIP_TYPE.DESTROYER else 4.0
 
@@ -215,6 +226,19 @@ class Ship:
         self.target[0] = target[0]
         self.target[1] = target[1]
 
+    def add_bubbles(self, pos, spread, init_size=0.5, quantity=3):
+        for _ in range(quantity):
+            x = random.uniform(-spread, spread)
+            y = random.uniform(-1.5, 1.5)
+            particle_position = [pos[0] + x, pos[1] + y, 0]
+            particle_velocity = [0, 0, 0]
+
+            _particles_manager.add_particle_p(
+                position=particle_position, 
+                velocity=particle_velocity, 
+                lifetime=random.uniform(3.0, 7.0),
+                size=random.uniform(init_size/5.0, init_size)
+            )
 
     def update(self, dt):
         self.load_status += dt / self.reload_time
@@ -241,6 +265,8 @@ class Ship:
             if self.turn < target_turn:
                 self.turn = target_turn
 
+        self.last_position = self.position.copy()
+        self.last_heading = self.heading
 
         self.heading += self.turn * dt
         self.position[0] += self.speed * math.cos(self.heading) * dt
@@ -248,19 +274,13 @@ class Ship:
 
         global _particles_manager
         if _particles_manager is not None:
-            if abs(self.speed) > 1:
-                for _ in range(2):
-                    x = random.uniform(-1.5, 1.5)
-                    y = random.uniform(-1.5, 1.5)
-                    particle_position = [self.position[0] + x, self.position[1] + y, 0]
-                    particle_velocity = [0, 0, 0]
-
-                    _particles_manager.add_particle_p(
-                        position=particle_position, 
-                        velocity=particle_velocity, 
-                        lifetime=random.uniform(3.0, 7.0),
-                        size=random.uniform(0.1, 0.5)
-                    )
+            d = dist_2D(self.last_position, self.position)
+            if d > 0:
+                t = 0
+                while t < 1:
+                    t += 1/d
+                    p = lerp_nD(self.last_position, self.position, t)
+                    self.add_bubbles(p, 1.5, 0.5*(self.speed / self.max_speed), 3)
 
         for island in _islands:
             if rect_collide(self.position, island.position, island.size*2):

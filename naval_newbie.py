@@ -175,6 +175,9 @@ class GameController:
                     glVertex2f(pos_x, pos_y)
                     glEnd()
 
+        if self.game_state == GameState.PAUSED:
+            pass
+
     def show_game(self):
         self.cam.setupCamera()
         
@@ -256,7 +259,7 @@ class GameController:
             if(self.mouse.left_button_pressed and self.player.ship.load_status >= 1.0):
                 turrets = self.player.ship.get_turret_pos()
                 for turret in turrets:
-                    bullet = Bullet(position=turret.copy())
+                    bullet = Bullet(position=turret.copy(), damage=self.player.ship.damage, player_bullet=True)
                     spread = 0.5
                     tg = [self.target_3D[0] + random.uniform(-spread, spread), self.target_3D[1] + random.uniform(-spread, spread), self.target_3D[2]]
                     if bullet.set_bullet_trajectory(target=tg):

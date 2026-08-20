@@ -86,6 +86,16 @@ def lerp(a, b, t):
         t = 1.0
     return a + (b - a) * t
 
+def lerp_nD(a: list[float], b: list[float], t: float):
+    outp = []
+    if len(a) != len(b):
+        return a
+
+    for i in range(len(a)):
+        outp.append(lerp(a[i], b[i], t))
+
+    return outp
+
 def between(v, a, b):
     return v >= a and v <= b
 
@@ -175,5 +185,37 @@ def conv_3d_2_2d(pos_3d: list[float], cam) -> tuple[float, float, bool]:
 
     return screen_x, screen_y, True
 
+def is_point_in_box(box_center, box_size, theta, point):
+    x, y, z = box_center
+    l, w, h = box_size
+    x1, y1, z1 = point
 
+    if not (z1 >= z - h/2 and z1 <= z + h/2):
+        return False
+        
+    dx = x1 - x
+    dy = y1 - y
     
+    cos_t = np.cos(theta)
+    sin_t = np.sin(theta)
+    
+    local_x = dx * cos_t + dy * sin_t
+    local_y = -dx * sin_t + dy * cos_t
+    
+    if not (local_x >= -l/2 and local_x <= l/2):
+        return False
+    if not (local_y >= -w/2 and local_y <= w/2):
+        return False
+        
+    return True
+
+
+
+
+
+
+
+
+
+
+
