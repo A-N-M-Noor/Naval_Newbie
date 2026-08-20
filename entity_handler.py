@@ -203,6 +203,7 @@ class Bullet:
             t += 0.5/d
             p = lerp_nD(self.last_position, self.position, t)
             if is_point_in_box(ship.position, ship.size, ship.heading, p):
+                self.position = p
                 return True
         return False
 
@@ -317,24 +318,14 @@ class Ship:
                 color=(1.0, random.uniform(0.5, 1.0), 0.0)
             )
     
-    def update(self, dt):
-        self.load_status += dt / self.reload_time
-        self.load_status = min(self.load_status, 1.0)
+    def update_controls(self, dt):
+        target_speed = 0.0
+        target_turn = 0.0
 
         if self.alive:
             target_speed = self.throttle * self.max_speed
             target_turn = self.steer * self.max_turning_speed * (self.speed / self.max_speed)
-        else:
-            target_speed = 0.0
-            target_turn = 0.0
-
-            self.position[2] -= 0.25 * dt
-
-            self.add_fire(init_size=1, lifetime=(1.0, 2.0), quantity=3)
-
-            if self.position[2] < -self.size[2]:
-                self.on_screen = False
-
+            
         if self.speed < target_speed:
             self.speed += self.acceleration * dt
             if self.speed > target_speed:
@@ -359,6 +350,21 @@ class Ship:
         self.heading += self.turn * dt
         self.position[0] += self.speed * math.cos(self.heading) * dt
         self.position[1] += self.speed * math.sin(self.heading) * dt 
+
+    def dying(self, dt):
+        self.position[2] -= 0.25 * dt
+        self.add_fire(init_size=1, lifetime=(1.0, 2.0), quantity=3)
+        if self.position[2] < -self.size[2]/2:
+            self.on_screen = False
+    
+    def update(self, dt):
+        self.load_status += dt / self.reload_time
+        self.load_status = min(self.load_status, 1.0)
+
+        self.update_controls(dt)
+
+        if not self.alive:
+            self.dying(dt)
 
         global _particles_manager
         if _particles_manager is not None:
@@ -474,8 +480,12 @@ class Ships_Handler:
         self.ships.append(ship)
 
     def update(self, player_ship, dt):
-        for ship in self.ships:
+        for i in range(len(self.ships)-1, -1, -1):
+            ship = self.ships[i]
+
             ship.update(dt)
+            if not ship.on_screen:
+                del self.ships[i]
 
     def draw(self):
         for ship in self.ships:
