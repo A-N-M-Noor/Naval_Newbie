@@ -67,13 +67,13 @@ class GameController:
     def add_ship(self):
         while True:
             dir = random.uniform(0, 2*math.pi)
-            dst = random.uniform(100, 300)
+            dst = random.uniform(100, 500)
             x = self.player.ship.position[0] + dst * math.cos(dir)
             y = self.player.ship.position[1] + dst * math.sin(dir)
 
             col = False
             for island in self.islands:
-                if rect_collide([x, y, 0], island.position, island.size*2):
+                if dist_2D([x, y], island.position) < island.size + 100:
                     col = True
                     break
             if not col:
@@ -153,37 +153,94 @@ class GameController:
             ht = ship.hp / ship.max_hp
             glColor3f(1.0, 0.0, 0.0)
             draw_rect(pos_x-pN_Cy(0.05), pos_y-pN_Cy(0.01), pN_Cy(0.1)*ht, pN_Cy(0.01))
-    
+
+    def mm_x(self, x):
+        ms = pN_Cy(0.3)
+        map_size = 600
+
+        return remap(x, -map_size, map_size, self.WIDTH - ms, self.WIDTH)
+
+    def mm_y(self, y):
+        ms = pN_Cy(0.3)
+        map_size = 600
+
+        return remap(y, -map_size, map_size, 0, ms)
+
+    def draw_minimap(self):
+        ms = pN_Cy(0.3)
+        map_size = 600
+        
+        glLineWidth(2.0)
+        glColor3f(0.2, 0.9, 0.9)
+        draw_rect(
+            self.WIDTH - ms, 0, ms, ms 
+        )
+        glColor3f(0.0, 0.0, 0.0)
+        draw_rect_hollow(
+            self.WIDTH - ms, 0, ms, ms 
+        )
+
+        for island in self.islands:
+            for sub in island.sub_islands:
+                x = self.mm_x(sub.position[0])
+                y = self.mm_y(sub.position[1])
+                glColor3f(sub.color[0], sub.color[1], sub.color[2])
+                draw_filled_circle(x, y, remap(sub.size, 0, map_size*2, 0, ms/2), segments=10)
+
+        for ship in self.ships_handler.ships:
+            x = self.mm_x(ship.position[0])
+            y = self.mm_y(ship.position[1])
+            glColor3f(1.0, 0.0, 0.0)
+            draw_rect(x, y, pN_Cy(0.01), pN_Cy(0.005), ship.heading)
+
+        x = self.mm_x(self.player.ship.position[0])
+        y = self.mm_y(self.player.ship.position[1])
+        glColor3f(0.0, 0.0, 1.0)
+        draw_rect(x, y, pN_Cy(0.01), pN_Cy(0.005), self.player.ship.heading)
+
+        t_x = self.mm_x(self.target_3D[0])
+        t_y = self.mm_y(self.target_3D[1])
+
+        glColor3f(1.0, 1.0, 0.0)
+        draw_line(t_x, t_y+5, t_x, t_y-5)
+        draw_line(t_x+5, t_y, t_x-5, t_y)
+
+    def draw_playing_hud(self):
+        l = self.player.ship.load_status * 90
+        glColor3f(0.0, 0.0, 0.0)
+        glLineWidth(4.0)
+        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), 135, 225, segments=25)
+        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), -45, 45, segments=25)
+
+        glLineWidth(2.0)
+        glColor3f(0.0, 1.0, 0.0)
+        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), 225-l, 225, segments=25)
+        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), -45, -45+l, segments=25)
+
+        glColor3f(0.2, 0.2, 0.2)
+        draw_circle(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.01), segments=10)
+
+        draw_line(pN_Cx(0.55), pN_Cy(0.5), pN_Cx(0.9), pN_Cy(0.5))
+        draw_line(pN_Cx(0.45), pN_Cy(0.5), pN_Cx(0.1), pN_Cy(0.5))
+
+        for i in range(10):
+            x = 0.55 + i* ((0.9-0.55)/10)
+            draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
+
+            x = 0.45 + i* ((0.1-0.45)/10)
+            draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
+
+        for ship in self.ships_handler.ships:
+            self.draw_ship_marker(ship)
+
+        self.draw_minimap()
+
+
     def draw_hud(self):
         draw_text(10, self.HEIGHT - 30, f"Game State: {self.game_state.name}")
 
         if self.game_state == GameState.PLAYING:
-            l = self.player.ship.load_status * 90
-            glColor3f(0.0, 0.0, 0.0)
-            glLineWidth(4.0)
-            draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), 135, 225, segments=25)
-            draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), -45, 45, segments=25)
-
-            glLineWidth(2.0)
-            glColor3f(0.0, 1.0, 0.0)
-            draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), 225-l, 225, segments=25)
-            draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), -45, -45+l, segments=25)
-
-            glColor3f(0.2, 0.2, 0.2)
-            draw_circle(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.01), segments=10)
-
-            draw_line(pN_Cx(0.55), pN_Cy(0.5), pN_Cx(0.9), pN_Cy(0.5))
-            draw_line(pN_Cx(0.45), pN_Cy(0.5), pN_Cx(0.1), pN_Cy(0.5))
-
-            for i in range(10):
-                x = 0.55 + i* ((0.9-0.55)/10)
-                draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
-
-                x = 0.45 + i* ((0.1-0.45)/10)
-                draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
-
-            for ship in self.ships_handler.ships:
-                self.draw_ship_marker(ship)
+            self.draw_playing_hud()
 
         if self.game_state == GameState.PAUSED:
             pass
@@ -192,9 +249,14 @@ class GameController:
         t_3D = self.cam.get_target_pos(h=0.0)
 
         for ship in self.ships_handler.ships:
-            p = line_intersect_box_r(ship.position, ship.size, ship.heading, self.cam.position, t_3D)
+            p = line_intersect_box_r(ship.position, ship.size, ship.heading, self.cam.position, t_3D, output_both=True)
             if p:
-                return p
+                p1 = p[0]
+                p2 = p[1]
+                if p1 and p2:
+                    p = [(p1[0] + p2[0])/2, (p1[1] + p2[1])/2, (p1[2] + p2[2])/2]
+                    return p
+                return p1
 
         return t_3D
 
@@ -212,11 +274,11 @@ class GameController:
 
         self.target_3D = self.get_target_3D()
 
-        # glPushMatrix()
-        # glTranslatef(self.target_3D[0], self.target_3D[1], self.target_3D[2])
-        # glColor3f(1.0, 0.0, 0.0)
-        # glutSolidSphere(0.1, 10, 10)
-        # glPopMatrix()
+        glPushMatrix()
+        glTranslatef(self.target_3D[0], self.target_3D[1], self.target_3D[2])
+        glColor3f(1.0, 0.0, 0.0)
+        glutSolidSphere(0.1, 10, 10)
+        glPopMatrix()
         
         self.player.draw()
         self.ships_handler.draw()
@@ -287,7 +349,7 @@ class GameController:
                         self.bullets_manager.add_bullet(bullet)
                 self.player.ship.load_status = 0.0
 
-            self.bullets_manager.update(self.dt)
+            self.bullets_manager.update(self.player.ship, self.dt)
 
         glutPostRedisplay()
 

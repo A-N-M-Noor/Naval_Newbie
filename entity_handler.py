@@ -81,25 +81,35 @@ class Bullets_Handler:
         self.bullets.append(bullet)
 
 
-    def update(self, dt):
+    def update(self, player_ship, dt):
         global _particles_manager
 
         for i in range(len(self.bullets)- 1, -1, -1):
             bullet: Bullet = self.bullets[i]
 
             bullet.update(dt)
-            if bullet.position[2] <= 0:
-                if _particles_manager is not None:
-                    _particles_manager.add_particle_p(
-                        position=[bullet.position[0], bullet.position[1], 0],
-                        velocity=[0, 0, -1.0],
-                        lifetime=random.uniform(1.0, 1.5),
-                        size=random.uniform(2, 4),
-                        color=(0.7, 1.0, 1.0)
-                    )
 
-                del self.bullets[i]
-                continue
+            if bullet.position[2] < 10: #ship level
+                global _ships_handler
+                deleted = False
+                for ship in _ships_handler.ships + [player_ship]:
+                    if not cube_collide(bullet.position, ship.position, ship.size[0]*3):
+                        continue
+                    if bullet.collide_ship(ship):
+                        if _particles_manager is not None:
+                            _particles_manager.add_particle_p(
+                                position=[bullet.position[0], bullet.position[1], bullet.position[2]],
+                                velocity=[0, 0, 0.0],
+                                lifetime=random.uniform(1.0, 1.5),
+                                size=random.uniform(2, 4),
+                                color=(1.0, random.uniform(0.7, 0.8), random.uniform(0.20, 0.40))
+                            )
+                        ship.take_damage(bullet.damage)
+                        deleted = True
+                        break
+                if deleted:
+                    del self.bullets[i]
+                    continue
 
             if bullet.position[2] < 20: #island level 
                 global _islands
@@ -120,27 +130,18 @@ class Bullets_Handler:
                     del self.bullets[i]
                     continue
 
-            if bullet.position[2] < 10: #ship level
-                global _ships_handler
-                deleted = False
-                for ship in _ships_handler.ships:
-                    if not cube_collide(bullet.position, ship.position, ship.size[0]*3):
-                        continue
-                    if bullet.collide_ship(ship):
-                        if _particles_manager is not None:
-                            _particles_manager.add_particle_p(
-                                position=[bullet.position[0], bullet.position[1], bullet.position[2]],
-                                velocity=[0, 0, 0.0],
-                                lifetime=random.uniform(1.0, 1.5),
-                                size=random.uniform(2, 4),
-                                color=(1.0, random.uniform(0.7, 0.8), random.uniform(0.20, 0.40))
-                            )
-                        ship.take_damage(bullet.damage)
-                        deleted = True
-                        break
-                if deleted:
-                    del self.bullets[i]
-                    continue
+            if bullet.position[2] <= 0:
+                if _particles_manager is not None:
+                    _particles_manager.add_particle_p(
+                        position=[bullet.position[0], bullet.position[1], 0],
+                        velocity=[0, 0, -1.0],
+                        lifetime=random.uniform(1.0, 1.5),
+                        size=random.uniform(2, 4),
+                        color=(0.7, 1.0, 1.0)
+                    )
+
+                del self.bullets[i]
+                continue
 
     def draw(self):
         for bullet in self.bullets:
@@ -206,7 +207,7 @@ class Bullet:
     def update(self, dt):
         self.last_position = self.position.copy()
         self.trail_segments.append(self.position.copy())
-        
+
         self.position[0] += self.velocity[0] * dt
         self.position[1] += self.velocity[1] * dt
         self.position[2] += self.velocity[2] * dt
@@ -244,7 +245,7 @@ class Ship:
 
         self.size = [6.0, 1.5, 1.5] if ship_type == SHIP_TYPE.DESTROYER else [10.0, 2.0, 1.5]
 
-        self.max_speed = 10.0 if ship_type == SHIP_TYPE.DESTROYER else 5.0
+        self.max_speed = 5.0 if ship_type == SHIP_TYPE.DESTROYER else 2.50
         self.acceleration = 2.0 if ship_type == SHIP_TYPE.DESTROYER else 1.0
         self.max_turning_speed = math.pi/4 if ship_type == SHIP_TYPE.DESTROYER else math.pi/8
         self.turning_acceleration = math.pi/8 if ship_type == SHIP_TYPE.DESTROYER else math.pi/16
@@ -347,8 +348,69 @@ class Ship:
         self.heading += self.turn * dt
         self.position[0] += self.speed * math.cos(self.heading) * dt
         self.position[1] += self.speed * math.sin(self.heading) * dt 
+    
+    def move_towards_point(self, target_point, player_pos, dt):
+        t_ang = math.atan2(target_point[1] - self.position[1], target_point[0] - self.position[0])
+
+        ang_diff = t_ang - self.heading
+        if ang_diff > math.pi:
+            ang_diff -= 2 * math.pi
+        elif ang_diff < -math.pi:
+            ang_diff += 2 * math.pi
+
+        steer = remap(ang_diff, -math.pi, math.pi, -1.0, 1.0)
+
+        self.move(1.0, steer, player_pos)
+
+    def ship_ai(self, player_ship, dt):
+        if not self.alive:
+            return
+        
+        dst_plr = dist_2D(self.position, player_ship.position)
+        global _islands
+
+        closest_island = _islands[0]
+        closest_dist = dist_2D(self.position, closest_island.position)
+        
+        for island in _islands:
+            dst_isl = dist_2D(self.position, island.position)
+            if dst_isl < closest_dist:
+                closest_island = island
+                closest_dist = dst_isl
+
+        dst_isl = closest_dist
+        ang_isl = math.atan2(closest_island.position[1] - self.position[1], closest_island.position[0] - self.position[0])
+        ang_plr = math.atan2(player_ship.position[1] - self.position[1], player_ship.position[0] - self.position[0])
+
+        target_point = player_ship.position
+
+        if dst_isl < dst_plr:
+            ang_diff = ang_isl - self.heading
+            ang_offs = closest_island.size / dst_isl
+
+            if abs(ang_plr - ang_isl) < ang_offs:
+                new_ang = ang_isl + ang_offs if ang_diff < 0 else ang_isl - ang_offs
+                target_point = [self.position[0] + dst_isl * math.cos(new_ang),
+                                self.position[1] + dst_isl * math.sin(new_ang)]
+            
+
+        self.move_towards_point(target_point, player_ship.position, dt)
+
+        if self.load_status >= 1.0:
+            self.load_status = 0.0
+            global _bullets_manager
+            if _bullets_manager is not None:
+                t_p = self.get_turret_pos()
+                for turret_pos in t_p:
+                    bullet = Bullet(position=[turret_pos[0], turret_pos[1], turret_pos[2]], damage=self.damage, player_bullet=False)
+                    bullet.set_bullet_trajectory(player_ship.position)
+                    _bullets_manager.add_bullet(bullet)
+        
 
     def dying(self, dt):
+        if not self.on_screen:
+            return
+        
         self.position[2] -= 0.25 * dt
         self.add_fire(init_size=1, lifetime=(1.0, 2.0), quantity=3)
         if self.position[2] < -self.size[2]/2:
@@ -478,7 +540,10 @@ class Ships_Handler:
 
     def update(self, player_ship, dt):
         for i in range(len(self.ships)-1, -1, -1):
-            ship = self.ships[i]
+            ship : Ship = self.ships[i]
+
+            if ship.alive:
+                ship.ship_ai(player_ship, dt)
 
             ship.update(dt)
             if not ship.on_screen:

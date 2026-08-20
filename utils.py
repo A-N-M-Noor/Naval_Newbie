@@ -18,9 +18,11 @@ def rotate_point(px, py, cx, cy, theta):
     dy = py - cy
     cos_t = np.cos(theta)
     sin_t = np.sin(theta)
-    local_x = dx * cos_t + dy * sin_t
-    local_y = -dx * sin_t + dy * cos_t
-    return local_x, local_y
+
+    local_x = dx * cos_t - dy * sin_t
+    local_y = dx * sin_t + dy * cos_t
+
+    return cx + local_x, cy + local_y
 
 def pN_Cx(x):
     return (x * _W)
@@ -47,6 +49,16 @@ def draw_circle(x, y, radius, segments=100):
     for i in range(segments):
         angle = 2 * pi * (i / segments)
         glVertex2f(x + radius * cos(angle), y + radius * sin(angle))
+    glEnd()
+
+def draw_filled_circle(x, y, radius, segments=100):
+    glBegin(GL_TRIANGLES)
+    for i in range(segments):
+        angle1 = 2 * pi * (i / segments)
+        angle2 = 2 * pi * ((i + 1) / segments)
+        glVertex2f(x, y)
+        glVertex2f(x + radius * cos(angle1), y + radius * sin(angle1))
+        glVertex2f(x + radius * cos(angle2), y + radius * sin(angle2))
     glEnd()
 
 def draw_line(x1, y1, x2, y2):
@@ -80,8 +92,32 @@ def end2D():
     glMatrixMode(GL_MODELVIEW)
     glEnable(GL_DEPTH_TEST)
 
-def draw_rect(x, y, w, h):
-    glBegin(GL_QUADS)
+def draw_rect(x, y, w, h, theta = 0.0):
+    if theta != 0.0:
+        cx = x
+        cy = y
+
+        x1, y1 = rotate_point(x, y, cx, cy, theta)
+        x2, y2 = rotate_point(x + w, y, cx, cy, theta)
+        x3, y3 = rotate_point(x + w, y + h, cx, cy, theta)
+        x4, y4 = rotate_point(x, y + h, cx, cy, theta)
+
+        glBegin(GL_QUADS)
+        glVertex2f(x1, y1)
+        glVertex2f(x2, y2)
+        glVertex2f(x3, y3)
+        glVertex2f(x4, y4)
+        glEnd()
+    else:
+        glBegin(GL_QUADS)
+        glVertex2f(x, y)
+        glVertex2f(x + w, y)
+        glVertex2f(x + w, y + h)
+        glVertex2f(x, y + h)
+        glEnd()
+
+def draw_rect_hollow(x, y, w, h):
+    glBegin(GL_LINE_LOOP)
     glVertex2f(x, y)
     glVertex2f(x + w, y)
     glVertex2f(x + w, y + h)
@@ -236,7 +272,7 @@ def is_point_in_box(box_center, box_size, theta, point):
         
     return True
 
-def line_intersect_box_r(box_center: list[float], box_size: list[float], theta: float, p1: list[float], p2: list[float]) -> list[float] | bool:
+def line_intersect_box_r(box_center: list[float], box_size: list[float], theta: float, p1: list[float], p2: list[float], output_both: bool = False) -> list[float] | bool:
     dim = len(p1)
     
     p1_loc = [p1[i] - box_center[i] for i in range(dim)]
@@ -281,41 +317,15 @@ def line_intersect_box_r(box_center: list[float], box_size: list[float], theta: 
                 return False
                 
     t = t_enter if t_enter >= 0 else t_exit
-        
+
+    t2 = t_exit if t_exit <= 1 else t_enter
+
     if t < 0.0 or t > 1.0:
         return False
-        
+
+    if output_both:
+        return [[p1[i] + t * (p2[i] - p1[i]) for i in range(dim)], [p1[i] + t2 * (p2[i] - p1[i]) for i in range(dim)]]
     return [p1[i] + t * (p2[i] - p1[i]) for i in range(dim)]
-
-def line_intersect_sphere(sphere_center: list[float], radius: float, p1: list[float], p2: list[float]) -> list[float] | bool:
-    p1_arr = np.array(p1, dtype=float)
-    p2_arr = np.array(p2, dtype=float)
-    center = np.array(sphere_center, dtype=float)
-
-    d = p2_arr - p1_arr
-    oc = p1_arr - center
-    
-    a = np.dot(d, d)
-    b = 2.0 * np.dot(oc, d)
-    c = np.dot(oc, oc) - radius**2
-
-    discriminant = b**2 - 4 * a * c
-    
-    if discriminant < 0:
-        return False
-        
-    sqrt_disc = np.sqrt(discriminant)
-
-    t_entry = (-b - sqrt_disc) / (2.0 * a)
-    
-    if t_entry < 0.0:
-        return False
-        
-    if t_entry > 1.0:
-        return False
-        
-    intersection = p1_arr + t_entry * d
-    return intersection.tolist()
 
 def get_random_in_box_r(box_center, box_size, theta):
     l, w, h = box_size

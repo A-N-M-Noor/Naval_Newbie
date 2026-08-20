@@ -24,6 +24,7 @@ class CameraController:
 
         self.up = np.array([0.0, 0.0, 1.0], dtype=np.float32)
         self.fovY = fovY
+        self.aspect = 1.0
 
         self.dt = 0.0
 
@@ -32,7 +33,7 @@ class CameraController:
         self.pitch += cursor_dir[1] * scale[1] * dt
         self.yaw += cursor_dir[0] * scale[0] * dt
 
-        self.pitch = min(max(self.pitch, np.deg2rad(0.1)), np.deg2rad(20))
+        self.pitch = min(max(self.pitch, np.deg2rad(0.25)), np.deg2rad(20))
 
     def zoom_camera(self, zoom_amount):
         self.distance += zoom_amount
@@ -46,6 +47,8 @@ class CameraController:
     def setupCamera(self):
         width = glutGet(GLUT_WINDOW_WIDTH)
         height = glutGet(GLUT_WINDOW_HEIGHT)
+
+        self.aspect = width / height
 
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
