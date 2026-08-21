@@ -66,14 +66,14 @@ class MouseInput:
     def mouse_click(self, button, state, x, y):
         if self.mouse_callback is not None:
             if button == GLUT_LEFT_BUTTON:
-                self.mouse_callback(True, state == GLUT_DOWN)
+                self.mouse_callback(button, state == GLUT_DOWN)
                 self.left_button_pressed = state == GLUT_DOWN
 
                 if state == GLUT_DOWN:
                     self.left_clicked = True
                     self.left_click_time = time.time()
             elif button == GLUT_RIGHT_BUTTON:
-                self.mouse_callback(False, state == GLUT_DOWN)
+                self.mouse_callback(button, state == GLUT_DOWN)
                 self.right_button_pressed = state == GLUT_DOWN
 
                 if state == GLUT_DOWN:

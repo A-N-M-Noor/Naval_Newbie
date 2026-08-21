@@ -135,11 +135,11 @@ class GameController:
                 else:
                     self.cam.fovY = 90
 
-    def handle_click(self, is_left_button, is_pressed):
-        if is_pressed:
-            pass
-        else:
-            pass
+    def handle_click(self, button, is_pressed):
+        if is_pressed and button == GLUT_LEFT_BUTTON:
+            self.shoot_bullet()
+        elif is_pressed and button == GLUT_RIGHT_BUTTON:
+            self.shoot_torpedo()
 
     def handle_scroll(self, direction):
         if self.game_state == GameState.PLAYING:
@@ -232,13 +232,15 @@ class GameController:
         y = pN_Cy(0.05)
 
         glColor3f(0.2, 0.2, 0.2)
-        draw_rect(x, y, w, h)
+        draw_rect(x-2, y-2, w+4, h+4)
         glColor3f(0.15, 1.0, 0.25)
         ht = self.player.ship.hp / self.player.ship.max_hp
-        draw_rect(x+2, y+2, w * ht-4, h-4)
+        if ht > 0.0:
+            draw_rect(x, y, w * ht, h)
 
     def draw_playing_hud(self):
         l = self.player.ship.load_status * 90
+        l_t = self.player.ship.torpedo_load_status * 90
         glColor3f(0.0, 0.0, 0.0)
         glLineWidth(4.0)
         draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), 135, 225, segments=25)
@@ -247,7 +249,7 @@ class GameController:
         glLineWidth(2.0)
         glColor3f(0.0, 1.0, 0.0)
         draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), 225-l, 225, segments=25)
-        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), -45, -45+l, segments=25)
+        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), -45, -45+l_t, segments=25)
 
         glColor3f(0.2, 0.2, 0.2)
         draw_circle(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.01), segments=10)
@@ -353,6 +355,27 @@ class GameController:
 
         self.player.update(thr, ster, self.target_3D, self.dt)   
 
+    def shoot_bullet(self):
+        if self.player.ship.load_status < 1.0:
+            return
+        turrets = self.player.ship.get_turret_pos()
+        for turret in turrets:
+            bullet = Bullet(position=turret.copy(), damage=self.player.ship.damage, player_bullet=True)
+            spread = 0.25
+            tg = [self.target_3D[0] + random.uniform(-spread, spread), self.target_3D[1] + random.uniform(-spread, spread), 0.0]
+            if bullet.set_bullet_trajectory(target=tg):
+                self.bullets_manager.add_bullet(bullet)
+        self.player.ship.load_status = 0.0
+
+    def shoot_torpedo(self):
+        if self.player.ship.torpedo_load_status < 1.0:
+            return
+        bullet = Bullet(position=self.player.ship.position.copy(), damage=self.player.ship.damage, player_bullet=True)
+        if bullet.set_torpedo_trajectory(target=self.target_3D):
+            self.bullets_manager.add_bullet(bullet)
+        self.player.ship.torpedo_load_status = 0.0
+
+    
     def game_play_update(self):
         if len(self.ships_handler.ships) < 2:
             self.add_ship()
@@ -369,15 +392,11 @@ class GameController:
         self.player_control()
         self.ships_handler.update(self.player.ship, self.dt)
 
-        if(self.mouse.left_button_pressed and self.player.ship.load_status >= 1.0):
-            turrets = self.player.ship.get_turret_pos()
-            for turret in turrets:
-                bullet = Bullet(position=turret.copy(), damage=self.player.ship.damage, player_bullet=True)
-                spread = 0.25
-                tg = [self.target_3D[0] + random.uniform(-spread, spread), self.target_3D[1] + random.uniform(-spread, spread), 0.0]
-                if bullet.set_bullet_trajectory(target=tg):
-                    self.bullets_manager.add_bullet(bullet)
-            self.player.ship.load_status = 0.0
+        if(self.mouse.left_button_pressed):
+            self.shoot_bullet()
+
+        if(self.mouse.right_button_pressed):
+            self.shoot_torpedo()
 
         self.bullets_manager.update(self.player.ship, self.dt)
 

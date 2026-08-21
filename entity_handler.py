@@ -72,6 +72,7 @@ class SHIP_TYPE(Enum):
 
 g = 1.7
 v = 80.0
+v_tpd = 25.0
 
 class Bullets_Handler:
     def __init__(self):
@@ -89,6 +90,10 @@ class Bullets_Handler:
 
             bullet.update(dt)
 
+            if bullet.is_torpedo and bullet.distance_travelled > bullet.max_dist:
+                bullet.explode_water()
+                del self.bullets[i]
+
             if bullet.position[2] < 10: #ship level
                 global _ships_handler
                 deleted = False
@@ -101,14 +106,7 @@ class Bullets_Handler:
                         continue
 
                     if bullet.collide_ship(ship):
-                        if _particles_manager is not None:
-                            _particles_manager.add_particle_p(
-                                position=[bullet.position[0], bullet.position[1], bullet.position[2]],
-                                velocity=[0, 0, 0.0],
-                                lifetime=random.uniform(1.0, 1.5),
-                                size=random.uniform(1, 2),
-                                color=(1.0, random.uniform(0.7, 0.8), random.uniform(0.20, 0.40))
-                            )
+                        bullet.explode_fire()
                         ship.take_damage(bullet.damage)
                         deleted = True
                         break
@@ -121,29 +119,15 @@ class Bullets_Handler:
                 deleted = False
                 for island in _islands:
                     if bullet.collide_island(island):
-                        if _particles_manager is not None:
-                            _particles_manager.add_particle_p(
-                                position=[bullet.position[0], bullet.position[1], bullet.position[2]],
-                                velocity=[0, 0, 0.0],
-                                lifetime=random.uniform(1.0, 1.5),
-                                size=random.uniform(2, 4),
-                                color=(1.0, random.uniform(0.7, 0.8), random.uniform(0.20, 0.40))
-                            )
+                        bullet.explode_fire()
                         deleted = True
                         break
                 if deleted:
                     del self.bullets[i]
                     continue
 
-            if bullet.position[2] <= 0:
-                if _particles_manager is not None:
-                    _particles_manager.add_particle_p(
-                        position=[bullet.position[0], bullet.position[1], 0],
-                        velocity=[0, 0, -1.0],
-                        lifetime=random.uniform(1.0, 1.5),
-                        size=random.uniform(2, 4),
-                        color=(0.7, 1.0, 1.0)
-                    )
+            if bullet.position[2] <= 0 and not bullet.is_torpedo:
+                bullet.explode_water()
 
                 del self.bullets[i]
                 continue
@@ -156,32 +140,86 @@ class Bullet:
     def __init__(self, position, damage = 10, player_bullet = True):
         self.position = position
         self.last_position = position
-        self.trail_segments = []
+
+        self.velocity = [0.0, 0.0, 0.0]
+        self.distance_travelled = 0.0
+        self.h_spd = 0.0
+        self.max_dist = 300.0
+
+        self.trail_segments = [self.position.copy()]
         self.player_bullet = player_bullet
         
         self.damage = damage
 
+
+        self.is_torpedo = False
+
+    def get_bullet_est_time(self, target):
+        self.set_bullet_trajectory(target)
+        dst = dist_3D(self.position, target)
+        t = dst / self.h_spd
+        return t
+
     def set_bullet_trajectory(self, target):
-        position = self.position
+            position = self.position
+            
+            self.dir = [target[0] - position[0], target[1] - position[1]]
+    
+            d = math.sqrt(self.dir[0]**2 + self.dir[1]**2)
+            h = position[2] - target[2]
+            if d != 0:
+                self.dir[0] /= d
+                self.dir[1] /= d
+    
+    
+            D = v**4 + 2* (v**2) * g * h - (g**2) * (d**2)
+            if D >= 0:
+                vf = d * math.sqrt( (v**2 + g*h + math.sqrt(D)) / (2 * (d**2 + h**2)) )
+                vz = (g*d) / (2*vf) - (h*vf) / d
+    
+                self.velocity = [vf * self.dir[0], vf * self.dir[1], vz]
+                self.h_spd = vf
+                return True
+            return False
+
+
+    def explode_fire(self):
+        global _particles_manager
+
+        if _particles_manager is not None:
+            _particles_manager.add_particle_p(
+                position=[self.position[0], self.position[1], self.position[2]],
+                velocity=[0, 0, 0.0],
+                lifetime=random.uniform(1.0, 1.5),
+                size=random.uniform(1, 2),
+                color=(1.0, random.uniform(0.7, 0.8), random.uniform(0.20, 0.40))
+            )
+
+    def explode_water(self):
+        global _particles_manager
+
+        if _particles_manager is not None:
+            _particles_manager.add_particle_p(
+                position=[self.position[0], self.position[1], 0],
+                velocity=[0, 0, -1.0],
+                lifetime=random.uniform(1.0, 1.5),
+                size=random.uniform(2, 4),
+                color=(0.7, 1.0, 1.0)
+            )
+
+    def set_torpedo_trajectory(self, target):
+        self.is_torpedo = True
+        self.damage *= 4
         
-        self.dir = [target[0] - position[0], target[1] - position[1]]
+        position = self.position
+        self.dir = [target[0] - position[0], target[1] - position[1], 0]
 
-        d = math.sqrt(self.dir[0]**2 + self.dir[1]**2)
-        h = position[2] - target[2]
-        if d != 0:
-            self.dir[0] /= d
-            self.dir[1] /= d
+        self.dir = set_mag(self.dir, 1.0)
 
+        self.h_spd = v_tpd
+        self.velocity = [self.dir[0] * v_tpd, self.dir[1] * v_tpd, 0.0]
 
-        D = v**4 + 2* (v**2) * g * h - (g**2) * (d**2)
-        if D >= 0:
-            vf = d * math.sqrt( (v**2 + g*h + math.sqrt(D)) / (2 * (d**2 + h**2)) )
-            vz = (g*d) / (2*vf) - (h*vf) / d
-
-            self.velocity = [vf * self.dir[0], vf * self.dir[1], vz]
-
-            return True
-        return False
+        return True
 
     def is_col_island(self, island: Island):
             for sub_island in island.sub_islands:
@@ -191,6 +229,9 @@ class Bullet:
                     self.position[0] = sub_island.position[0] + dir[0]
                     self.position[1] = sub_island.position[1] + dir[1]
                     self.position[2] = sub_island.position[2] + dir[2]
+
+                    if self.is_torpedo:
+                        self.position[2] = 0.1
                     return True
             return False
     
@@ -206,28 +247,65 @@ class Bullet:
         if self.player_bullet and not ship.is_player:
             p = line_intersect_box_r(ship.position, scale_nD(ship.size, [1.05, 3.0, 2.0]), ship.heading, self.last_position, self.position)
         else:
-            p = line_intersect_box_r(ship.position, scale_nD(ship.size, [1.05, 2.0, 1.5]), ship.heading, self.last_position, self.position)
+            p = line_intersect_box_r(ship.position, scale_nD(ship.size, [1.05, 2.5, 2.0]), ship.heading, self.last_position, self.position)
 
         if p:
             self.position = p
             return True
         return False
 
+    def add_bubbles(self, pos, spread, diverge = 0.1, init_size=0.5, quantity=3):
+        global _particles_manager
+        if _particles_manager is None:
+            return
+    
+        for _ in range(quantity):
+            x = random.uniform(-spread, spread)
+            y = random.uniform(-spread, spread)
+            particle_position = [pos[0] + x, pos[1] + y, 0]
+            a = random.uniform(0, 2 * math.pi)
+            particle_velocity = [math.cos(a) * diverge, math.sin(a) * diverge, 0]
+
+            _particles_manager.add_particle_p(
+                position=particle_position, 
+                velocity=particle_velocity, 
+                lifetime=random.uniform(3.0, 7.0),
+                size=random.uniform(init_size/5.0, init_size)
+            )
+            
     def update(self, dt):
         self.last_position = self.position.copy()
-        self.trail_segments.append(self.position.copy())
 
         self.position[0] += self.velocity[0] * dt
         self.position[1] += self.velocity[1] * dt
         self.position[2] += self.velocity[2] * dt
 
-        
+        if self.is_torpedo:
+            self.velocity[2] = 0.0
+            self.position[2] = 0.0
+
+        self.distance_travelled += self.h_spd * dt
+
+        self.trail_segments.append(self.position.copy())
+
         if len(self.trail_segments) > 10:
             self.trail_segments.pop(0)
 
-        self.velocity[2] -= g * dt
+        if not self.is_torpedo:
+            self.velocity[2] -= g * dt
+
+        if self.is_torpedo:
+            d = dist_2D(self.last_position, self.position)
+            t = 0
+            while t < 1:
+                t += 1/d
+                p = lerp_nD(self.last_position, self.position, t)
+                self.add_bubbles(p, 0.0, 0.1, 0.2, 1)
 
     def draw(self):
+        if self.is_torpedo:
+            return
+        
         glPushMatrix()
         glTranslatef(self.position[0], self.position[1], self.position[2])
         glColor3f(1.0, 1.0, 0.0)
@@ -266,9 +344,12 @@ class Ship:
         self.max_hp = 100 if ship_type == SHIP_TYPE.DESTROYER else 200
         self.hp = self.max_hp
         self.damage = 10 if ship_type == SHIP_TYPE.DESTROYER else 20
-        self.reload_time = 2.0 if ship_type == SHIP_TYPE.DESTROYER else 4.0
 
+        self.reload_time = 2.0 if ship_type == SHIP_TYPE.DESTROYER else 4.0
         self.load_status = 1.0
+
+        self.torpedo_reload_time = self.reload_time * 5.0
+        self.torpedo_load_status = 1.0
         
         self.throttle = 0.0
         self.steer = 0.0
@@ -297,16 +378,17 @@ class Ship:
         self.target[0] = target[0]
         self.target[1] = target[1]
 
-    def add_bubbles(self, pos, spread, init_size=0.5, quantity=3):
+    def add_bubbles(self, pos, spread, diverge=0.1, init_size=0.5, quantity=3):
         global _particles_manager
         if _particles_manager is None:
             return
     
         for _ in range(quantity):
             x = random.uniform(-spread, spread)
-            y = random.uniform(-1.5, 1.5)
+            y = random.uniform(-spread, spread)
             particle_position = [pos[0] + x, pos[1] + y, 0]
-            particle_velocity = [0, 0, 0]
+            a = random.uniform(0, 2 * math.pi)
+            particle_velocity = [math.cos(a) * diverge, math.sin(a) * diverge, 0]
 
             _particles_manager.add_particle_p(
                 position=particle_position, 
@@ -386,6 +468,21 @@ class Ship:
         else:
             self.move(1.0, steer, player_pos)
 
+    def estimate_pos_after_t(self, ship: Ship, t, dt):
+        spd = ship.speed
+        turn = ship.turn
+
+        ps = ship.position.copy()
+        ph = ship.heading
+        _t = 0
+        while _t < t:
+            _t += dt
+            ps[0] += spd * math.cos(ph) * dt
+            ps[1] += spd * math.sin(ph) * dt
+            ph += turn * dt
+
+        return ps
+
     def ship_ai(self, player_ship, dt):
         if not self.alive:
             return
@@ -421,13 +518,17 @@ class Ship:
         self.move_towards_point(target_point, player_ship.position, dt)
 
         if self.load_status >= 1.0 and dst_plr < 300.0:
-            self.load_status = -random.random()
+            self.load_status = 0
             global _bullets_manager
             if _bullets_manager is not None:
                 t_p = self.get_turret_pos()
+                accuracy = random.uniform(0.0, 0.5)
                 for turret_pos in t_p:
                     bullet = Bullet(position=[turret_pos[0], turret_pos[1], turret_pos[2]], damage=self.damage, player_bullet=False)
-                    bullet.set_bullet_trajectory(get_random_in_box_r(player_ship.position, scale_nD(player_ship.size, [1.5, 3, 0.1]), player_ship.heading))
+
+                    _t = bullet.get_bullet_est_time(player_ship.position)
+                    est_pos = self.estimate_pos_after_t(player_ship, _t * accuracy, dt)
+                    bullet.set_bullet_trajectory(get_random_in_box_r(est_pos, scale_nD(player_ship.size, [2.5, 3, 0.1]), player_ship.heading))
                     _bullets_manager.add_bullet(bullet)
         
 
@@ -444,6 +545,9 @@ class Ship:
         self.load_status += dt / self.reload_time
         self.load_status = min(self.load_status, 1.0)
 
+        self.torpedo_load_status += dt / self.torpedo_reload_time
+        self.torpedo_load_status = min(self.torpedo_load_status, 1.0)
+
         self.update_controls(dt)
 
         if not self.alive:
@@ -457,7 +561,7 @@ class Ship:
                 while t < 1:
                     t += 1/d
                     p = lerp_nD(self.last_position, self.position, t)
-                    self.add_bubbles(p, 1.5, 0.5*(self.speed / self.max_speed), 3)
+                    self.add_bubbles(p, 1.5, 1.0, 0.5*(self.speed / self.max_speed), 3)
 
         for island in _islands:
             if rect_collide(self.position, island.position, island.size*2):
