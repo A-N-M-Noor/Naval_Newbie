@@ -3,7 +3,7 @@ from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
 import numpy as np
-from utils import lerp
+from utils import lerp, clamp
 
 
 # def lerp(a, b, t):
@@ -33,11 +33,11 @@ class CameraController:
         self.pitch += cursor_dir[1] * scale[1] * dt
         self.yaw += cursor_dir[0] * scale[0] * dt
 
-        self.pitch = min(max(self.pitch, np.deg2rad(0.25)), np.deg2rad(20))
+        self.pitch = clamp(self.pitch, np.deg2rad(0.25), np.deg2rad(20))
 
     def zoom_camera(self, zoom_amount):
         self.distance += zoom_amount
-        self.distance = min(max(self.distance, 5.0), 15.0)
+        self.distance = clamp(self.distance, 5.0, 15.0)
         
     def update_cam(self, cam_target):
         self.target[0] = cam_target[0]

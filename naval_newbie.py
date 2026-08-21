@@ -60,24 +60,38 @@ class GameController:
         self.ships_handler = Ships_Handler()
         set_ships_handler(self.ships_handler)
 
-        for _ in range(5):
+        for _ in range(2):
             self.add_ship()
 
 
     def add_ship(self):
         while True:
             dir = random.uniform(0, 2*math.pi)
-            dst = random.uniform(100, 500)
+            dst = random.uniform(300, 600)
             x = self.player.ship.position[0] + dst * math.cos(dir)
             y = self.player.ship.position[1] + dst * math.sin(dir)
 
+            if not between(x, -500, 500) or not between(y, -500, 500):
+                continue
+
+            for ship in self.ships_handler.ships:
+                if dist_2D([x, y], ship.position) < 300:
+                    continue
+            
             col = False
             for island in self.islands:
                 if dist_2D([x, y], island.position) < island.size + 100:
                     col = True
                     break
             if not col:
-                ship = Ship(position=[x, y], rotation=random.uniform(0, math.pi * 2), ship_type=random.choice(list(SHIP_TYPE)))
+                s_type = random.random()
+                if s_type < 0.5:
+                    s_type = SHIP_TYPE.DESTROYER
+                else:
+                    s_type = SHIP_TYPE.BATTLESHIP
+
+                ship = Ship(position=[x, y], rotation=random.uniform(0, math.pi * 2), ship_type=s_type)
+                print(f"Added ship type of {ship.ship_type.name}")
                 self.ships_handler.add_ship(ship)
                 break
 
@@ -135,7 +149,7 @@ class GameController:
                 self.cam.zoom_camera(0.5)
 
     def draw_ship_marker(self, ship: Ship):
-        marker_p = [ship.position[0], ship.position[1], 5.0]
+        marker_p = [ship.position[0], ship.position[1], ship.size[2] + 1.0]
         pos_x, pos_y, visible = conv_3d_2_2d(marker_p, self.cam)
 
         if not visible:
@@ -149,10 +163,10 @@ class GameController:
 
         if ship.alive:
             glColor3f(0.3, 0.3, 0.3)
-            draw_rect(pos_x-pN_Cy(0.05), pos_y-pN_Cy(0.01), pN_Cy(0.1), pN_Cy(0.01))
+            draw_rect(pos_x-pN_Cy(0.05), pos_y+pN_Cy(0.05), pN_Cy(0.1), pN_Cy(0.01))
             ht = ship.hp / ship.max_hp
             glColor3f(1.0, 0.0, 0.0)
-            draw_rect(pos_x-pN_Cy(0.05), pos_y-pN_Cy(0.01), pN_Cy(0.1)*ht, pN_Cy(0.01))
+            draw_rect(pos_x-pN_Cy(0.05), pos_y+pN_Cy(0.05), pN_Cy(0.1)*ht, pN_Cy(0.01))
 
     def mm_x(self, x):
         ms = pN_Cy(0.3)
@@ -190,20 +204,38 @@ class GameController:
         for ship in self.ships_handler.ships:
             x = self.mm_x(ship.position[0])
             y = self.mm_y(ship.position[1])
-            glColor3f(1.0, 0.0, 0.0)
-            draw_rect(x, y, pN_Cy(0.01), pN_Cy(0.005), ship.heading)
+            if ship.ship_type == SHIP_TYPE.DESTROYER:
+                glColor3f(1.0, 0.5, 0.0)
+            else:
+                glColor3f(1.0, 0.0, 0.5)
+            draw_rect(x, y, pN_Cy(0.015), pN_Cy(0.0075), ship.heading)
 
         x = self.mm_x(self.player.ship.position[0])
         y = self.mm_y(self.player.ship.position[1])
         glColor3f(0.0, 0.0, 1.0)
-        draw_rect(x, y, pN_Cy(0.01), pN_Cy(0.005), self.player.ship.heading)
+        draw_rect(x, y, pN_Cy(0.015), pN_Cy(0.0075), self.player.ship.heading)
 
         t_x = self.mm_x(self.target_3D[0])
         t_y = self.mm_y(self.target_3D[1])
 
+        t_x = clamp(t_x, self.WIDTH - ms, self.WIDTH)
+        t_y = clamp(t_y, 0, ms)
+
         glColor3f(1.0, 1.0, 0.0)
         draw_line(t_x, t_y+5, t_x, t_y-5)
         draw_line(t_x+5, t_y, t_x-5, t_y)
+
+    def draw_ship_healtbar(self):
+        w = self.WIDTH - pN_Cy(0.7)
+        h = pN_Cy(0.06)
+        x = self.WIDTH/2 - w/2
+        y = pN_Cy(0.05)
+
+        glColor3f(0.2, 0.2, 0.2)
+        draw_rect(x, y, w, h)
+        glColor3f(0.15, 1.0, 0.25)
+        ht = self.player.ship.hp / self.player.ship.max_hp
+        draw_rect(x+2, y+2, w * ht-4, h-4)
 
     def draw_playing_hud(self):
         l = self.player.ship.load_status * 90
@@ -235,6 +267,8 @@ class GameController:
 
         self.draw_minimap()
 
+        self.draw_ship_healtbar()
+
 
     def draw_hud(self):
         draw_text(10, self.HEIGHT - 30, f"Game State: {self.game_state.name}")
@@ -249,7 +283,7 @@ class GameController:
         t_3D = self.cam.get_target_pos(h=0.0)
 
         for ship in self.ships_handler.ships:
-            p = line_intersect_box_r(ship.position, ship.size, ship.heading, self.cam.position, t_3D, output_both=True)
+            p = line_intersect_box_r(ship.position, scale_nD(ship.size, [4, 3.0, 6.0]), ship.heading, self.cam.position, t_3D, output_both=True)
             if p:
                 p1 = p[0]
                 p2 = p[1]
@@ -319,6 +353,34 @@ class GameController:
 
         self.player.update(thr, ster, self.target_3D, self.dt)   
 
+    def game_play_update(self):
+        if len(self.ships_handler.ships) < 2:
+            self.add_ship()
+
+        self.cam.update_cam(cam_target=[self.player.ship.position[0], self.player.ship.position[1], 2.0])
+        cP = self.mouse.get_pos()
+        cD = (cP[0] - self.WIDTH//2, cP[1] - self.HEIGHT//2)
+        if cD[0] != 0 or cD[1] != 0:
+            self.cam.move_camera(cursor_dir=cD, scale=(-0.01, 0.01), dt=self.dt)
+        self.mouse.set_pos(self.WIDTH//2, self.HEIGHT//2)
+
+        self.particle_manager.update(self.dt)
+
+        self.player_control()
+        self.ships_handler.update(self.player.ship, self.dt)
+
+        if(self.mouse.left_button_pressed and self.player.ship.load_status >= 1.0):
+            turrets = self.player.ship.get_turret_pos()
+            for turret in turrets:
+                bullet = Bullet(position=turret.copy(), damage=self.player.ship.damage, player_bullet=True)
+                spread = 0.25
+                tg = [self.target_3D[0] + random.uniform(-spread, spread), self.target_3D[1] + random.uniform(-spread, spread), 0.0]
+                if bullet.set_bullet_trajectory(target=tg):
+                    self.bullets_manager.add_bullet(bullet)
+            self.player.ship.load_status = 0.0
+
+        self.bullets_manager.update(self.player.ship, self.dt)
+
     def idle(self):
         current_time = time.time()
         self.dt = current_time - self.last_frame_time
@@ -327,29 +389,7 @@ class GameController:
         self.WIDTH, self.HEIGHT = glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT)
 
         if self.game_state == GameState.PLAYING:
-            self.cam.update_cam(cam_target=[self.player.ship.position[0], self.player.ship.position[1], 2.0])
-            cP = self.mouse.get_pos()
-            cD = (cP[0] - self.WIDTH//2, cP[1] - self.HEIGHT//2)
-            if cD[0] != 0 or cD[1] != 0:
-                self.cam.move_camera(cursor_dir=cD, scale=(-0.01, 0.01), dt=self.dt)
-            self.mouse.set_pos(self.WIDTH//2, self.HEIGHT//2)
-
-            self.particle_manager.update(self.dt)
-
-            self.player_control()
-            self.ships_handler.update(self.player.ship, self.dt)
-
-            if(self.mouse.left_button_pressed and self.player.ship.load_status >= 1.0):
-                turrets = self.player.ship.get_turret_pos()
-                for turret in turrets:
-                    bullet = Bullet(position=turret.copy(), damage=self.player.ship.damage, player_bullet=True)
-                    spread = 0.25
-                    tg = [self.target_3D[0] + random.uniform(-spread, spread), self.target_3D[1] + random.uniform(-spread, spread), 0.0]
-                    if bullet.set_bullet_trajectory(target=tg):
-                        self.bullets_manager.add_bullet(bullet)
-                self.player.ship.load_status = 0.0
-
-            self.bullets_manager.update(self.player.ship, self.dt)
+            self.game_play_update()
 
         glutPostRedisplay()
 

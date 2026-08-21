@@ -138,6 +138,9 @@ def remap(value, leftMin, leftMax, rightMin, rightMax):
 
     return rightMin + (valueScaled * rightSpan)
 
+def clamp(value, min_value, max_value):
+    return max(min_value, min(value, max_value))
+
 def lerp(a, b, t):
     if t < 0.0:
         t = 0.0
@@ -344,7 +347,11 @@ def get_random_in_box_r(box_center, box_size, theta):
     else:
         return [rotated_x + box_center[0], rotated_y + box_center[1], z + box_center[2]]
 
-
+def scale_nD(vec: list[float], scale: list[float] | float) -> list[float]:
+    if isinstance(scale, (int, float)):
+        return [v * scale for v in vec]
+    else:
+        return [vec[i] * scale[i] for i in range(len(vec))]
 
 
 

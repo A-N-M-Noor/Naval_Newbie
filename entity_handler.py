@@ -93,15 +93,20 @@ class Bullets_Handler:
                 global _ships_handler
                 deleted = False
                 for ship in _ships_handler.ships + [player_ship]:
+                    if ship.is_player and bullet.player_bullet:
+                        continue
+                    if not ship.is_player and not bullet.player_bullet:
+                        continue
                     if not cube_collide(bullet.position, ship.position, ship.size[0]*3):
                         continue
+
                     if bullet.collide_ship(ship):
                         if _particles_manager is not None:
                             _particles_manager.add_particle_p(
                                 position=[bullet.position[0], bullet.position[1], bullet.position[2]],
                                 velocity=[0, 0, 0.0],
                                 lifetime=random.uniform(1.0, 1.5),
-                                size=random.uniform(2, 4),
+                                size=random.uniform(1, 2),
                                 color=(1.0, random.uniform(0.7, 0.8), random.uniform(0.20, 0.40))
                             )
                         ship.take_damage(bullet.damage)
@@ -154,7 +159,7 @@ class Bullet:
         self.trail_segments = []
         self.player_bullet = player_bullet
         
-        self.damage = 10
+        self.damage = damage
 
     def set_bullet_trajectory(self, target):
         position = self.position
@@ -197,7 +202,11 @@ class Bullet:
         return False
 
     def collide_ship(self, ship: Ship):
-        p = line_intersect_box_r(ship.position, ship.size, ship.heading, self.last_position, self.position)
+        p = None
+        if self.player_bullet and not ship.is_player:
+            p = line_intersect_box_r(ship.position, scale_nD(ship.size, [1.05, 3.0, 2.0]), ship.heading, self.last_position, self.position)
+        else:
+            p = line_intersect_box_r(ship.position, scale_nD(ship.size, [1.05, 2.0, 1.5]), ship.heading, self.last_position, self.position)
 
         if p:
             self.position = p
@@ -237,6 +246,7 @@ class Ship:
         if len(position) == 2:
             position.append(0.0)
 
+        self.is_player = False
         self.ship_type = ship_type
         self.position = position
         self.last_position = position.copy()
@@ -270,13 +280,19 @@ class Ship:
         if ship_type == SHIP_TYPE.DESTROYER:
             self.turrets.append([2.0, 0.0, 0.75])
             self.turrets.append([-2.0, 0.0, 0.75])
+        elif ship_type == SHIP_TYPE.BATTLESHIP:
+            self.turrets.append([3.0, 0.0, 0.75])
+            self.turrets.append([-3.0, 0.0, 0.75])
+
+        self.stuck = False
+        self.stuck_reverse = 30.0
 
         self.on_screen = True
         self.alive = True
     
     def move(self, throttle, steer, target):
-        self.throttle = max(-1.0, min(1.0, throttle))
-        self.steer = max(-1.0, min(1.0, steer))
+        self.throttle = clamp(throttle, -1.0, 1.0)
+        self.steer = clamp(steer, -1.0, 1.0)
 
         self.target[0] = target[0]
         self.target[1] = target[1]
@@ -360,7 +376,15 @@ class Ship:
 
         steer = remap(ang_diff, -math.pi, math.pi, -1.0, 1.0)
 
-        self.move(1.0, steer, player_pos)
+        if self.stuck:
+            self.stuck_reverse -= dt
+            if self.stuck_reverse <= 0:
+                self.stuck = False
+                self.stuck_reverse = 30.0
+            steer *= -1.0
+            self.move(-1.0, steer, player_pos)
+        else:
+            self.move(1.0, steer, player_pos)
 
     def ship_ai(self, player_ship, dt):
         if not self.alive:
@@ -396,14 +420,14 @@ class Ship:
 
         self.move_towards_point(target_point, player_ship.position, dt)
 
-        if self.load_status >= 1.0:
-            self.load_status = 0.0
+        if self.load_status >= 1.0 and dst_plr < 300.0:
+            self.load_status = -random.random()
             global _bullets_manager
             if _bullets_manager is not None:
                 t_p = self.get_turret_pos()
                 for turret_pos in t_p:
                     bullet = Bullet(position=[turret_pos[0], turret_pos[1], turret_pos[2]], damage=self.damage, player_bullet=False)
-                    bullet.set_bullet_trajectory(player_ship.position)
+                    bullet.set_bullet_trajectory(get_random_in_box_r(player_ship.position, scale_nD(player_ship.size, [1.5, 3, 0.1]), player_ship.heading))
                     _bullets_manager.add_bullet(bullet)
         
 
@@ -444,6 +468,7 @@ class Ship:
                     self.position[1] = island.position[1] + dir[1]
 
                     self.speed *= 0.5
+                    self.stuck = True
 
     def take_damage(self, damage):
         self.hp -= damage
@@ -558,6 +583,12 @@ class Ships_Handler:
 class Player:
     def __init__(self, position, rotation):
         self.ship = Ship(SHIP_TYPE.DESTROYER, position, rotation)
+        self.ship.is_player = True
+
+        self.ship.max_hp *= 4
+        self.ship.hp = self.ship.max_hp
+
+        self.ship.damage *= 4
 
     def update(self, thr, steer, target, dt):
         self.ship.move(thr, steer, target)
