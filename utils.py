@@ -8,6 +8,13 @@ import numpy as np
 
 _W, _H = 1000, 700
 
+from enum import Enum
+class GameState(Enum):
+    MENU = 0
+    UPGRADES = 1
+    PLAYING = 2
+    PAUSED = 3
+    GAME_OVER = 4
 
 def set_window_size(width, height):
     global _W, _H
@@ -353,7 +360,8 @@ def scale_nD(vec: list[float], scale: list[float] | float) -> list[float]:
     else:
         return [vec[i] * scale[i] for i in range(len(vec))]
 
-
+def quit_game():
+    glutLeaveMainLoop()
 
 
 

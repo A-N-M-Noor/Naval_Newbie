@@ -14,20 +14,15 @@ from entity_handler import Ship, Ships_Handler, SHIP_TYPE, Player, Bullet, Bulle
 from entity_handler import set_ships_handler, set_particles_manager, set_bullets_manager, set_islands
 from particles import Particle, Particles
 
-from enum import Enum
-
-class GameState(Enum):
-    MENU = 0
-    UPGRADES = 1
-    PLAYING = 2
-    PAUSED = 3
-    GAME_OVER = 4
+from ui_handler import UI
 
 class GameController:
     def __init__(self):
         self.WIDTH = 1000
         self.HEIGHT = 700
         self.cursor_hidden = False
+
+        self.ui = UI(self)
 
         self.keyboard = KeyboardInput()
         self.keyboard.key_callback = self.handle_key
@@ -74,15 +69,19 @@ class GameController:
             if not between(x, -500, 500) or not between(y, -500, 500):
                 continue
 
+            col = False
+
             for ship in self.ships_handler.ships:
                 if dist_2D([x, y], ship.position) < 300:
-                    continue
-            
-            col = False
-            for island in self.islands:
-                if dist_2D([x, y], island.position) < island.size + 100:
                     col = True
                     break
+            
+            if not col:
+                for island in self.islands:
+                    if dist_2D([x, y], island.position) < island.size + 100:
+                        col = True
+                        break
+
             if not col:
                 s_type = random.random()
                 if s_type < 0.5:
@@ -123,11 +122,10 @@ class GameController:
         else:
             if key == b'p':
                 if self.game_state == GameState.PLAYING:
-                    self.game_state = GameState.PAUSED
+                    self.switch_game_state(GameState.PAUSED)
                 elif self.game_state == GameState.PAUSED:
                     self.mouse.set_pos(self.WIDTH//2, self.HEIGHT//2)
-                    self.game_state = GameState.PLAYING
-                self.sync_cursor_visibility()
+                    self.switch_game_state(GameState.PLAYING)
 
             if key == b'z':
                 if self.cam.fovY == 90:
@@ -136,10 +134,18 @@ class GameController:
                     self.cam.fovY = 90
 
     def handle_click(self, button, is_pressed):
-        if is_pressed and button == GLUT_LEFT_BUTTON:
-            self.shoot_bullet()
-        elif is_pressed and button == GLUT_RIGHT_BUTTON:
-            self.shoot_torpedo()
+        ui_clicked = False
+        if button == GLUT_LEFT_BUTTON and is_pressed:
+            ui_clicked = self.ui.click(self.mouse.mouse_position[0], self.mouse.mouse_position[1])
+
+        if ui_clicked:
+            return
+
+        if self.game_state == GameState.PLAYING:
+            if is_pressed and button == GLUT_LEFT_BUTTON:
+                self.shoot_bullet()
+            elif is_pressed and button == GLUT_RIGHT_BUTTON:
+                self.shoot_torpedo()
 
     def handle_scroll(self, direction):
         if self.game_state == GameState.PLAYING:
@@ -148,138 +154,7 @@ class GameController:
             else:
                 self.cam.zoom_camera(0.5)
 
-    def draw_ship_marker(self, ship: Ship):
-        marker_p = [ship.position[0], ship.position[1], ship.size[2] + 1.0]
-        pos_x, pos_y, visible = conv_3d_2_2d(marker_p, self.cam)
-
-        if not visible:
-            return
-        
-        if ship.hp == ship.max_hp:
-            glColor3f(1.0, 0.0, 1.0)
-            draw_line(pos_x-5, pos_y+5, pos_x, pos_y)
-            draw_line(pos_x+5, pos_y+5, pos_x, pos_y)
-            return
-
-        if ship.alive:
-            glColor3f(0.3, 0.3, 0.3)
-            draw_rect(pos_x-pN_Cy(0.05), pos_y+pN_Cy(0.05), pN_Cy(0.1), pN_Cy(0.01))
-            ht = ship.hp / ship.max_hp
-            glColor3f(1.0, 0.0, 0.0)
-            draw_rect(pos_x-pN_Cy(0.05), pos_y+pN_Cy(0.05), pN_Cy(0.1)*ht, pN_Cy(0.01))
-
-    def mm_x(self, x):
-        ms = pN_Cy(0.3)
-        map_size = 600
-
-        return remap(x, -map_size, map_size, self.WIDTH - ms, self.WIDTH)
-
-    def mm_y(self, y):
-        ms = pN_Cy(0.3)
-        map_size = 600
-
-        return remap(y, -map_size, map_size, 0, ms)
-
-    def draw_minimap(self):
-        ms = pN_Cy(0.3)
-        map_size = 600
-        
-        glLineWidth(2.0)
-        glColor3f(0.2, 0.9, 0.9)
-        draw_rect(
-            self.WIDTH - ms, 0, ms, ms 
-        )
-        glColor3f(0.0, 0.0, 0.0)
-        draw_rect_hollow(
-            self.WIDTH - ms, 0, ms, ms 
-        )
-
-        for island in self.islands:
-            for sub in island.sub_islands:
-                x = self.mm_x(sub.position[0])
-                y = self.mm_y(sub.position[1])
-                glColor3f(sub.color[0], sub.color[1], sub.color[2])
-                draw_filled_circle(x, y, remap(sub.size, 0, map_size*2, 0, ms/2), segments=10)
-
-        for ship in self.ships_handler.ships:
-            x = self.mm_x(ship.position[0])
-            y = self.mm_y(ship.position[1])
-            if ship.ship_type == SHIP_TYPE.DESTROYER:
-                glColor3f(1.0, 0.5, 0.0)
-            else:
-                glColor3f(1.0, 0.0, 0.5)
-            draw_rect(x, y, pN_Cy(0.015), pN_Cy(0.0075), ship.heading)
-
-        x = self.mm_x(self.player.ship.position[0])
-        y = self.mm_y(self.player.ship.position[1])
-        glColor3f(0.0, 0.0, 1.0)
-        draw_rect(x, y, pN_Cy(0.015), pN_Cy(0.0075), self.player.ship.heading)
-
-        t_x = self.mm_x(self.target_3D[0])
-        t_y = self.mm_y(self.target_3D[1])
-
-        t_x = clamp(t_x, self.WIDTH - ms, self.WIDTH)
-        t_y = clamp(t_y, 0, ms)
-
-        glColor3f(1.0, 1.0, 0.0)
-        draw_line(t_x, t_y+5, t_x, t_y-5)
-        draw_line(t_x+5, t_y, t_x-5, t_y)
-
-    def draw_ship_healtbar(self):
-        w = self.WIDTH - pN_Cy(0.7)
-        h = pN_Cy(0.06)
-        x = self.WIDTH/2 - w/2
-        y = pN_Cy(0.05)
-
-        glColor3f(0.2, 0.2, 0.2)
-        draw_rect(x-2, y-2, w+4, h+4)
-        glColor3f(0.15, 1.0, 0.25)
-        ht = self.player.ship.hp / self.player.ship.max_hp
-        if ht > 0.0:
-            draw_rect(x, y, w * ht, h)
-
-    def draw_playing_hud(self):
-        l = self.player.ship.load_status * 90
-        l_t = self.player.ship.torpedo_load_status * 90
-        glColor3f(0.0, 0.0, 0.0)
-        glLineWidth(4.0)
-        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), 135, 225, segments=25)
-        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), -45, 45, segments=25)
-
-        glLineWidth(2.0)
-        glColor3f(0.0, 1.0, 0.0)
-        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), 225-l, 225, segments=25)
-        draw_arc(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.05), -45, -45+l_t, segments=25)
-
-        glColor3f(0.2, 0.2, 0.2)
-        draw_circle(pN_Cx(0.5), pN_Cy(0.5), pN_Cy(0.01), segments=10)
-
-        draw_line(pN_Cx(0.55), pN_Cy(0.5), pN_Cx(0.9), pN_Cy(0.5))
-        draw_line(pN_Cx(0.45), pN_Cy(0.5), pN_Cx(0.1), pN_Cy(0.5))
-
-        for i in range(10):
-            x = 0.55 + i* ((0.9-0.55)/10)
-            draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
-
-            x = 0.45 + i* ((0.1-0.45)/10)
-            draw_line(pN_Cx(x), pN_Cy(0.495), pN_Cx(x), pN_Cy(0.505))
-
-        for ship in self.ships_handler.ships:
-            self.draw_ship_marker(ship)
-
-        self.draw_minimap()
-
-        self.draw_ship_healtbar()
-
-
-    def draw_hud(self):
-        draw_text(10, self.HEIGHT - 30, f"Game State: {self.game_state.name}")
-
-        if self.game_state == GameState.PLAYING:
-            self.draw_playing_hud()
-
-        if self.game_state == GameState.PAUSED:
-            pass
+    
 
     def get_target_3D(self):
         t_3D = self.cam.get_target_pos(h=0.0)
@@ -325,7 +200,8 @@ class GameController:
             island.draw()
 
         begin2D(self.WIDTH, self.HEIGHT)
-        self.draw_hud()
+        self.ui.draw_hud()
+
         end2D()
 
     def showScreen(self):
@@ -339,6 +215,10 @@ class GameController:
             self.show_game()
 
         glutSwapBuffers()
+
+    def switch_game_state(self, new_state):
+        self.game_state = new_state
+        self.sync_cursor_visibility()
 
     def player_control(self):
         thr = 0.0
@@ -384,7 +264,7 @@ class GameController:
         cP = self.mouse.get_pos()
         cD = (cP[0] - self.WIDTH//2, cP[1] - self.HEIGHT//2)
         if cD[0] != 0 or cD[1] != 0:
-            self.cam.move_camera(cursor_dir=cD, scale=(-0.01, 0.01), dt=self.dt)
+            self.cam.move_camera(cursor_dir=cD, scale=(-0.01, -0.01), dt=self.dt)
         self.mouse.set_pos(self.WIDTH//2, self.HEIGHT//2)
 
         self.particle_manager.update(self.dt)
