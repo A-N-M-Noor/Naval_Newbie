@@ -156,3 +156,9 @@ https://youtu.be/DRbHMfnBSU8
 Latest development progress:
 
 https://youtu.be/w-J7b20a6RI
+
+### Update 3 — August 21, 2026
+
+Latest development progress:
+
+https://youtu.be/HrJicWo0814
