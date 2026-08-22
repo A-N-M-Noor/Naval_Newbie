@@ -22,8 +22,6 @@ class GameController:
         self.HEIGHT = 700
         self.cursor_hidden = False
 
-        self.ui = UI(self)
-
         self.keyboard = KeyboardInput()
         self.keyboard.key_callback = self.handle_key
 
@@ -32,11 +30,12 @@ class GameController:
         self.mouse.mouse_wheel_callback = self.handle_scroll
 
         self.cam = CameraController(fovY=90)
+        self.cam_vals = [self.cam.distance, self.cam.yaw, self.cam.pitch, self.cam.z, self.cam.fovY]
 
         self.last_frame_time = time.time()
         self.dt = 0
 
-        self.game_state = GameState.PLAYING
+        self.game_state = GameState.MENU
 
 
         self.player = Player(position=[0, 0], rotation=0)
@@ -55,9 +54,27 @@ class GameController:
         self.ships_handler = Ships_Handler()
         set_ships_handler(self.ships_handler)
 
+        self.ui = UI(self)
+
+    def clear_all(self):
+        self.islands.clear()
+        self.ships_handler.ships.clear()
+        self.bullets_manager.bullets.clear()
+        self.particle_manager.particles.clear()
+
+        self.player = Player(position=[0, 0], rotation=0, ship_type=self.player.ship.ship_type)
+
+        self.cam = CameraController(fovY=90)
+        self.dt = 1.0
+        self.cam.update_cam(cam_target=[self.player.ship.position[0], self.player.ship.position[1], 2.0])
+        self.cam.set_cam_pos(forced=True)
+
+    def reset_game(self):
+        self.clear_all()
+        self.set_environment()
+
         for _ in range(2):
             self.add_ship()
-
 
     def add_ship(self):
         while True:
@@ -154,7 +171,53 @@ class GameController:
             else:
                 self.cam.zoom_camera(0.5)
 
-    
+    def switch_ship(self):
+        if self.game_state not in (GameState.PLAYING, GameState.PAUSED):
+            self.player.switch_ship()
+
+    def show_menu(self):
+        self.cam.setupCamera()
+        self.cam.distance = 15.0
+        self.cam.fovY = 62
+        self.cam.yaw = -5 * (np.pi / 4)
+        self.cam.pitch = np.deg2rad(30)
+        
+        glBegin(GL_QUADS)
+        glColor3f(0, 0.75, 1)
+        glVertex3f(-1000, -1000, 0)
+        glVertex3f(-1000, 1000, 0)
+        glVertex3f(1000, 1000, 0)
+        glVertex3f(1000, -1000, 0)
+        glEnd()
+
+        self.draw_dock()
+        self.player.draw()
+
+    def draw_dock(self):
+        glPushMatrix()
+
+        glColor3f(0.5, 0.5, 0.5)
+        draw_box(center=[3.5, -3, 0], size=[15, 2, 2])
+        draw_box(center=[3.5, 3, 0], size=[15, 2, 2])
+
+        glColor3f(0.4, 0.4, 0.4)
+        draw_box(center=[20, 8, 0], size=[20, 12, 3])
+        draw_box(center=[20, -8, 0], size=[20, 12, 3])
+
+        glColor3f(0.45, 0.45, 0.45)
+        draw_box(center=[20, -3, 0], size=[22, 2.5, 4])
+        draw_box(center=[20, 3, 0], size=[22, 2.5, 4])
+
+        glColor3f(0.7, 0.7, 0.7)
+        draw_box(center=[20, -5, 3], size=[15, 5, 5])
+        draw_box(center=[20, 5, 3], size=[15, 5, 5])
+        draw_box(center=[20, 0, 5], size=[15, 15, 1.5])
+
+        glColor3f(0.0, 0.0, 0.0)
+        draw_box(center=[20, 0, 0], size=[14.5, 14.5, 9])
+
+        glPopMatrix()
+
 
     def get_target_3D(self):
         t_3D = self.cam.get_target_pos(h=0.0)
@@ -174,14 +237,14 @@ class GameController:
     def show_game(self):
         self.cam.setupCamera()
         
-        if self.game_state in (GameState.PLAYING, GameState.PAUSED):
-            glBegin(GL_QUADS)
-            glColor3f(0, 0.75, 1)
-            glVertex3f(-1000, -1000, 0)
-            glVertex3f(-1000, 1000, 0)
-            glVertex3f(1000, 1000, 0)
-            glVertex3f(1000, -1000, 0)
-            glEnd()
+    
+        glBegin(GL_QUADS)
+        glColor3f(0, 0.75, 1)
+        glVertex3f(-1000, -1000, 0)
+        glVertex3f(-1000, 1000, 0)
+        glVertex3f(1000, 1000, 0)
+        glVertex3f(1000, -1000, 0)
+        glEnd()
 
         self.target_3D = self.get_target_3D()
 
@@ -199,24 +262,43 @@ class GameController:
         for island in self.islands:
             island.draw()
 
-        begin2D(self.WIDTH, self.HEIGHT)
-        self.ui.draw_hud()
-
-        end2D()
-
     def showScreen(self):
         glClearColor(0.5, 1.0, 1.0, 1.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glViewport(0, 0, self.WIDTH, self.HEIGHT)
 
         set_window_size(self.WIDTH, self.HEIGHT)
-        
-        if self.game_state in (GameState.PLAYING, GameState.PAUSED):
+
+        if self.game_state == GameState.MENU:
+            self.show_menu()
+
+        elif self.game_state in (GameState.PLAYING, GameState.PAUSED):
             self.show_game()
+
+        begin2D(self.WIDTH, self.HEIGHT)
+        self.ui.draw_hud()
+        end2D()
 
         glutSwapBuffers()
 
     def switch_game_state(self, new_state):
+        if new_state == GameState.MENU:
+            self.clear_all()
+
+        if new_state == GameState.PAUSED:
+            if self.game_state != GameState.PLAYING:
+                return
+            self.cam_vals = [self.cam.distance, self.cam.yaw, self.cam.pitch, self.cam.z, self.cam.fovY]
+
+            self.cam.pitch = np.deg2rad(25)
+            self.cam.fovY = 90
+
+        elif new_state == GameState.PLAYING:
+            if self.game_state == GameState.PAUSED:
+                self.cam.distance, self.cam.yaw, self.cam.pitch, self.cam.z, self.cam.fovY = self.cam_vals
+            else:
+                self.reset_game()
+        
         self.game_state = new_state
         self.sync_cursor_visibility()
 
@@ -264,7 +346,7 @@ class GameController:
         cP = self.mouse.get_pos()
         cD = (cP[0] - self.WIDTH//2, cP[1] - self.HEIGHT//2)
         if cD[0] != 0 or cD[1] != 0:
-            self.cam.move_camera(cursor_dir=cD, scale=(-0.01, -0.01), dt=self.dt)
+            self.cam.move_camera(cursor_dir=cD, scale=[-0.01, -0.01], dt=self.dt)
         self.mouse.set_pos(self.WIDTH//2, self.HEIGHT//2)
 
         self.particle_manager.update(self.dt)
@@ -287,8 +369,16 @@ class GameController:
 
         self.WIDTH, self.HEIGHT = glutGet(GLUT_WINDOW_WIDTH), glutGet(GLUT_WINDOW_HEIGHT)
 
-        if self.game_state == GameState.PLAYING:
+        if self.game_state == GameState.MENU:
+            self.cam.dt = self.dt
+            self.cam.update_cam(cam_target=[0, 0, 0.0])
+
+        elif self.game_state == GameState.PLAYING:
             self.game_play_update()
+
+        elif self.game_state == GameState.PAUSED:
+            self.cam.update_cam(cam_target=[self.player.ship.position[0], self.player.ship.position[1], 2.0])
+            self.cam.move_camera(cursor_dir=(math.sin(time.time())*20, 0), scale=[-0.01, -0.01], dt=self.dt)
 
         glutPostRedisplay()
 

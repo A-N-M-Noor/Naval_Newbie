@@ -137,6 +137,14 @@ def draw_3D_line(p1, p2):
     glVertex3f(p2[0], p2[1], p2[2])
     glEnd()
 
+def draw_box(center, size, theta=0.0):
+    glPushMatrix()
+    glTranslatef(center[0], center[1], center[2])
+    glRotatef(np.rad2deg(theta), 0, 0, 1)
+    glScalef(size[0], size[1], size[2])
+    glutSolidCube(1.0)
+    glPopMatrix()
+
 def remap(value, leftMin, leftMax, rightMin, rightMax):
     leftSpan = leftMax - leftMin
     rightSpan = rightMax - rightMin

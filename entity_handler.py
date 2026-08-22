@@ -331,7 +331,7 @@ class Ship:
         self.heading = rotation
         self.last_heading = rotation
 
-        self.size = [6.0, 1.5, 1.5] if ship_type == SHIP_TYPE.DESTROYER else [10.0, 2.0, 1.5]
+        self.size = [6.0, 1.5, 1.5] if ship_type == SHIP_TYPE.DESTROYER else [10.0, 2.5, 1.7]
 
         self.max_speed = 5.0 if ship_type == SHIP_TYPE.DESTROYER else 2.50
         self.acceleration = 2.0 if ship_type == SHIP_TYPE.DESTROYER else 1.0
@@ -685,8 +685,8 @@ class Ships_Handler:
 
 
 class Player:
-    def __init__(self, position, rotation):
-        self.ship = Ship(SHIP_TYPE.DESTROYER, position, rotation)
+    def __init__(self, position, rotation, ship_type=SHIP_TYPE.DESTROYER):
+        self.ship = Ship(ship_type, position, rotation)
         self.ship.is_player = True
 
         self.ship.max_hp *= 4
@@ -700,3 +700,12 @@ class Player:
 
     def draw(self):
         self.ship.draw()
+
+    def switch_ship(self):
+        if self.ship.ship_type == SHIP_TYPE.BATTLESHIP:
+            new_ship = Ship(SHIP_TYPE.DESTROYER, self.ship.position.copy(), self.ship.heading)
+        else:
+            new_ship = Ship(SHIP_TYPE.BATTLESHIP, self.ship.position.copy(), self.ship.heading)
+
+        new_ship.is_player = True
+        self.ship = new_ship

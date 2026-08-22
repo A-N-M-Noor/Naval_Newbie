@@ -25,11 +25,56 @@ class UI:
         self.gc: GameController = game_controller
 
         self.current_menu = self.gc.game_state
+        self.last_menu = self.gc.game_state
 
         self.btn_h = ButtonsHandler(self)
 
     def click(self, x, y):
         return self.btn_h.click(x, y)
+
+    def draw_menu_hud(self):
+        gc: GameController = self.gc
+        btn_h: ButtonsHandler = self.btn_h
+
+        btn_h.btn(Button(
+            ID=0, 
+            x=pN_Cx(0.5)-pN_Cy(0.1), y=pN_Cy(0.90), width=pN_Cy(0.2), height=pN_Cy(0.05), 
+            text="Battle!", 
+            button_type=ButtonType.DANGER, 
+            callback=gc.switch_game_state, callback_args=(GameState.PLAYING,)
+        ))
+
+        btn_h.btn(Button(
+            ID=1, 
+            x=pN_Cx(0.95), y=pN_Cy(0.45), width=pN_Cy(0.05), height=pN_Cy(0.05), 
+            text=">", 
+            button_type=ButtonType.REGULAR, 
+            callback=gc.switch_ship
+        ))
+
+        btn_h.btn(Button(
+            ID=2, 
+            x=pN_Cy(0.05), y=pN_Cy(0.05), width=pN_Cy(0.2), height=pN_Cy(0.05), 
+            text="Quit", 
+            button_type=ButtonType.REGULAR, 
+            callback=quit_game
+        ))
+
+        btn_h.btn(Button(
+            ID=3, 
+            x=pN_Cy(0.30), y=pN_Cy(0.05), width=pN_Cy(0.2), height=pN_Cy(0.05), 
+            text="Upgrade!", 
+            button_type=ButtonType.WARNING, 
+            callback=gc.switch_game_state, callback_args=(GameState.UPGRADES,)
+        ))
+
+        # btn_h.btn(Button(
+        #     ID=3, 
+        #     x=pN_Cy(0.25), y=pN_Cy(0.05), width=pN_Cy(0.2), height=pN_Cy(0.05), 
+        #     text="Upgrade", 
+        #     button_type=ButtonType.REGULAR, 
+        #     callback=gc.switch_game_state, callback_args=(GameState.UPGRADE,)
+        # ))
 
     def draw_ship_marker(self, ship: Ship):
         gc: GameController = self.gc
@@ -97,6 +142,8 @@ class UI:
                 glColor3f(1.0, 0.5, 0.0)
             else:
                 glColor3f(1.0, 0.0, 0.5)
+            if not ship.alive:
+                glColor3f(0.2, 0.2, 0.2)
             draw_rect(x, y, pN_Cy(0.015), pN_Cy(0.0075), ship.heading)
 
         x = self.mm_x(gc.player.ship.position[0])
@@ -164,49 +211,57 @@ class UI:
 
         self.draw_ship_healtbar()
 
+    def draw_paused_hud(self):
+        gc: GameController = self.gc
+        btn_h: ButtonsHandler = self.btn_h
+
+        btn_h.btn(Button(
+            ID=50, 
+            x=pN_Cy(0.1), y=pN_Cy(0.5), width=pN_Cy(0.6), height=pN_Cy(0.05), 
+            text="Resume", 
+            button_type=ButtonType.SUCCESS, 
+            callback=gc.switch_game_state, callback_args=(GameState.PLAYING,)
+        ))
+
+        btn_h.btn(Button(
+            ID=51, 
+            x=pN_Cy(0.1), y=pN_Cy(0.44), width=pN_Cy(0.6), height=pN_Cy(0.05), 
+            text="Menu", 
+            button_type=ButtonType.WARNING, 
+            callback=gc.switch_game_state, callback_args=(GameState.MENU,)
+        ))
+
+        btn_h.btn(Button(
+            ID=52, 
+            x=pN_Cy(0.1), y=pN_Cy(0.38), width=pN_Cy(0.6), height=pN_Cy(0.05), 
+            text="Quit", 
+            button_type=ButtonType.DANGER, 
+            callback=quit_game
+        ))
 
     def draw_hud(self):
         gc: GameController = self.gc
         btn_h: ButtonsHandler = self.btn_h
 
-        if gc.game_state == GameState.PLAYING:
-            if self.current_menu != GameState.PLAYING:
-                self.current_menu = GameState.PLAYING
-                btn_h.buttons = [None] * 100
-            
+        self.current_menu = gc.game_state
+
+        if self.current_menu != self.last_menu:
+            self.last_menu = self.current_menu
+            btn_h.buttons = [None] * 100
+
+        if self.current_menu == GameState.MENU:
+            btn_h.menu_set(GameState.MENU)
+            self.draw_menu_hud()
+
+        elif self.current_menu == GameState.PLAYING:
             btn_h.menu_set(GameState.PLAYING)
             self.draw_playing_hud()
 
-        if gc.game_state == GameState.PAUSED:
-            if self.current_menu != GameState.PAUSED:
-                self.current_menu = GameState.PAUSED
-                btn_h.buttons = [None] * 100
-
+        elif self.current_menu == GameState.PAUSED:
             btn_h.menu_set(GameState.PAUSED)
+            self.draw_paused_hud()
             
-            btn_h.btn(Button(
-                ID=50, 
-                x=pN_Cy(0.1), y=pN_Cy(0.5), width=pN_Cy(0.6), height=pN_Cy(0.05), 
-                text="Resume", 
-                button_type=ButtonType.SUCCESS, 
-                callback=gc.switch_game_state, callback_args=(GameState.PLAYING,)
-            ))
-
-            btn_h.btn(Button(
-                ID=51, 
-                x=pN_Cy(0.1), y=pN_Cy(0.44), width=pN_Cy(0.6), height=pN_Cy(0.05), 
-                text="Menu", 
-                button_type=ButtonType.WARNING, 
-                callback=gc.switch_game_state, callback_args=(GameState.MENU,)
-            ))
-
-            btn_h.btn(Button(
-                ID=52, 
-                x=pN_Cy(0.1), y=pN_Cy(0.38), width=pN_Cy(0.6), height=pN_Cy(0.05), 
-                text="Quit", 
-                button_type=ButtonType.DANGER, 
-                callback=quit_game
-            ))
+            
 
 class ButtonType(Enum):
     REGULAR  = 0
@@ -288,6 +343,7 @@ class Button:
     def show(self):
         glColor3f(*self.get_color())
         if self.button_type.value >= 5:
+            glLineWidth(2.0)
             draw_rect_hollow(self.x, self.y, self.width, self.height)
         else:
             draw_rect(self.x, self.y, self.width, self.height)
